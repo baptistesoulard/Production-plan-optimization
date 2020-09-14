@@ -12,28 +12,6 @@ from matplotlib import pyplot as plt
 from typing import List, Dict
 
 
-def generate_input():
-    # Define the daily requirement
-    calendar: List[str] = [
-        "2020/7/13",
-        "2020/7/14",
-        "2020/7/15",
-        "2020/7/16",
-        "2020/7/17",
-        "2020/7/18",
-        "2020/7/19",
-    ]
-    day_req: List[int] = [30, 10, 34, 23, 23, 24, 25]
-    day_requirements: Dict[str, int] = {day: day_req[i] for i, day in enumerate(calendar)}
-
-    # Define the hourly cost per line
-    lines: List[str] = ["Curtain_C1", "Curtain_C2", "Curtain_C3"]
-    cost_temp: List[int] = [350, 300, 350]
-    cost_line = {line: cost_temp[i] for i, line in enumerate(lines)}
-
-    return calendar, lines, day_requirements, cost_line
-
-
 def optimize_planning(timeline, workcenters, needs, wc_cost):
     # Initiate optimization model
     model = gurobipy.Model("Optimize production planning")
@@ -100,24 +78,32 @@ def optimize_planning(timeline, workcenters, needs, wc_cost):
     return sol
 
 
-def plot_planning(df):
-    Load_Graph = df.T
-    Load_Graph["Min capacity"] = 7
-    Load_Graph["Max capacity"] = 12
+def plot_planning(plan, need):
+    plan = plan.T
+    plan["Min capacity"] = 7
+    plan["Max capacity"] = 12
 
     my_colors = ["skyblue", "salmon", "lightgreen"]
 
-    _, ax = plt.subplots()
-    Load_Graph[["Min capacity", "Max capacity"]].plot(
-        rot=90, ax=ax, style=["b", "b--"], linewidth=1
+    fig, axs = plt.subplots(2)
+    need.T.plot(
+        kind="bar", width=0.2, title="Need in h per day", ax=axs[0], color='midnightblue'
     )
 
-    Load_Graph.drop(["Min capacity", "Max capacity"], axis=1).plot(
-        kind="bar", title="Load in h per line", ax=ax, color=my_colors
+    plan[["Min capacity", "Max capacity"]].plot(
+        rot=90, ax=axs[1], style=["b", "b--"], linewidth=1
     )
 
-    ax.tick_params(axis="x", labelsize=7)
-    ax.tick_params(axis="y", labelsize=7)
+    plan.drop(["Min capacity", "Max capacity"], axis=1).plot(
+        kind="bar", title="Load in h per line", ax=axs[1], color=my_colors
+    )
+
+    axs[0].tick_params(axis="x", labelsize=7)
+    axs[0].tick_params(axis="y", labelsize=7)
+    axs[0].get_legend().remove()
+    axs[0].set_xticklabels([])
+    axs[1].tick_params(axis="x", labelsize=7)
+    axs[1].tick_params(axis="y", labelsize=7)
 
     plt.savefig("Result_Model1.png", bbox_inches="tight", dpi=1200)
     axe = plt.show()
@@ -125,10 +111,24 @@ def plot_planning(df):
 
 
 # Generate inputs
-CALENDAR = generate_input()[0]
-LINES = generate_input()[1]
-DAY_REQUIREMENTS = generate_input()[2]
-COST_LINE = generate_input()[3]
+# Define the daily requirement
+CALENDAR: List[str] = [
+    "2020/7/13",
+    "2020/7/14",
+    "2020/7/15",
+    "2020/7/16",
+    "2020/7/17",
+    "2020/7/18",
+    "2020/7/19",
+]
+day_req: List[int] = [30, 10, 34, 23, 23, 24, 25]
+DAY_REQUIREMENTS: Dict[str, int] = {day: day_req[i] for i, day in enumerate(CALENDAR)}
+df_requirement = pd.DataFrame.from_dict({day: [day_req[i]] for i, day in enumerate(CALENDAR)})
+
+# Define the hourly cost per line
+LINES: List[str] = ["Curtain_C1", "Curtain_C2", "Curtain_C3"]
+cost_temp: List[int] = [350, 300, 350]
+COST_LINE = {line: cost_temp[i] for i, line in enumerate(LINES)}
 
 # Optimize the planning
 solution = optimize_planning(CALENDAR, LINES, DAY_REQUIREMENTS, COST_LINE)
@@ -140,4 +140,4 @@ for line in LINES:
         optimized_planning.at[line, day] = solution.loc["Total hours[" + str(day) + "," + str(line) + "]"][0]
 
 # Plot the new planning
-plot_planning(optimized_planning)
+plot_planning(optimized_planning, df_requirement)
