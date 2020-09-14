@@ -5,130 +5,158 @@ Created on Mon Jul 27 15:09:01 2020
 @author: soulba01
 """
 
-## Import required packages
+# Import required packages
 import pandas as pd
 import gurobipy
 from matplotlib import pyplot as plt
 import datetime
 
-######     INITIALIZE THE MODEL     #####
 
-model = gurobipy.Model("Minimize cost")
+def optimize_planning(timeline, workcenters, needs, wc_cost_reg, wc_cost_ot):
+    # Initiate optimization model
+    model = gurobipy.Model("Minimize cost")
+
+    # DEFINE VARIABLES
+    # Load variables (hours) - regular and overtime
+    reg_hours = model.addVars(
+        timeline, workcenters, lb=7, ub=8, vtype=gurobipy.GRB.INTEGER, name="Regular hours"
+    )
+    ot_hours = model.addVars(
+        timeline, workcenters, lb=0, ub=4, vtype=gurobipy.GRB.INTEGER, name="OT hours"
+    )
+    # Status of the line ( 0 = closed, 1 = opened)
+    line_opening = model.addVars(CALENDAR, workcenters, vtype=gurobipy.GRB.BINARY, name="Open")
+    # Variable total load (hours)
+    total_hours = model.addVars(
+        timeline, LINES, lb=0, ub=12, vtype=gurobipy.GRB.INTEGER, name="Total hours"
+    )
+    # Variable cost
+    cost = model.addVars(timeline, workcenters, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name="Cost")
+
+    # CONSTRAINTS
+    # Set the value of cost (hours * hourly cost)
+    model.addConstrs(
+        (
+            (
+                cost[(i, j)]
+                == reg_hours[(i, j)] * wc_cost_reg[j] * line_opening[(i, j)]
+                + ot_hours[(i, j)] * wc_cost_ot[j] * line_opening[(i, j)]
+                for i in timeline
+                for j in workcenters
+            )
+        ),
+        name="Cost constr",
+    )
+    # Set the value of total load (regular + overtime)
+    model.addConstrs(
+        (
+            (
+                total_hours[(i, j)]
+                == (reg_hours[(i, j)] + ot_hours[(i, j)]) * line_opening[(i, j)]
+                for i in timeline
+                for j in workcenters
+            )
+        ),
+        name="Total hours constr",
+    )
+
+    # Constraint : requirement = load of the 3 lines
+    model.addConstrs(
+        ((total_hours.sum(d, "*") == needs[d] for d in timeline)),
+        name="Requirements",
+    )
+
+    # DEFINE MODEL
+    # Objective : minimize a function
+    model.ModelSense = gurobipy.GRB.MINIMIZE
+    # Function to minimize
+    optimization_var = gurobipy.quicksum(cost[(i, j)] for i in timeline for j in workcenters)
+    objective = 0
+    objective += optimization_var
+
+    # SOLVE MODEL
+    model.setObjective(objective)
+    model.optimize()
+
+    sol = pd.DataFrame(data={"Solution": model.X}, index=model.VarName)
+    sol = sol.filter(like="Total hours", axis=0)
+
+    return sol
 
 
-######     DECISION VARIABLES     #####
+def plot_planning(plan, need):
+    plan = plan.T
+    plan["Min capacity"] = 7
+    plan["Max capacity"] = 12
 
-# Calendar
-days = ['2020/7/15', '2020/7/16', '2020/7/17', '2020/7/18', '2020/7/19', '2020/7/20', '2020/7/21']
+    my_colors = ["skyblue", "salmon", "lightgreen"]
+
+    fig, axs = plt.subplots(2)
+    need.T.plot(
+        kind="bar", width=0.2, title="Need in h per day", ax=axs[0], color='midnightblue'
+    )
+
+    plan[["Min capacity", "Max capacity"]].plot(
+        rot=90, ax=axs[1], style=["b", "b--"], linewidth=1
+    )
+
+    plan.drop(["Min capacity", "Max capacity"], axis=1).plot(
+        kind="bar", title="Load in h per line", ax=axs[1], color=my_colors
+    )
+
+    axs[0].tick_params(axis="x", labelsize=7)
+    axs[0].tick_params(axis="y", labelsize=7)
+    axs[0].get_legend().remove()
+    axs[0].set_xticklabels([])
+    axs[1].tick_params(axis="x", labelsize=7)
+    axs[1].tick_params(axis="y", labelsize=7)
+
+    plt.savefig("Result_Model1.png", bbox_inches="tight", dpi=1200)
+    axe = plt.show()
+    return axe
+
+
+# Generate inputs
+# Define the daily requirement
+CALENDAR = [
+    "2020/7/15",
+    "2020/7/16",
+    "2020/7/17",
+    "2020/7/18",
+    "2020/7/19",
+    "2020/7/20",
+    "2020/7/21",
+]
+
+day_req = [30, 10, 34, 23, 23, 24, 25]
+DAY_REQUIREMENTS = {d: day_req[i] for i, d in enumerate(CALENDAR)}
+df_requirement = pd.DataFrame.from_dict({day: [day_req[i]] for i, day in enumerate(CALENDAR)})
 
 # Weekdays / Weekends
-weekdaysList = []
-weekendList = []
-for i in days:
+weekdays = []
+weekend = []
+for i in CALENDAR:
     date = datetime.datetime.strptime(i, "%Y/%m/%d")
     if date.weekday() < 5:
-        weekdaysList.append(i)
+        weekdays.append(i)
     else:
-        weekendList.append(i)
-    
-# Production lines
-lines = ['Curtain_C1', 'Curtain_C2', 'Curtain_C3']
+        weekend.append(i)
 
-# Production requirement (hours)
-dayReq = [30, 10, 34, 23, 23, 24, 25]
-dayRequirements = {d : dayReq[i] for i,d in enumerate (days)}
-
-# Hourly cost per line - regular and overtime
+# Define the hourly cost per line - regular and overtime
+LINES = ["Curtain_C1", "Curtain_C2", "Curtain_C3"]
 regCost = [350, 300, 350]
-regCostDict = {l : regCost[i] for i,l in enumerate(lines)}
+REG_COST = {l: regCost[i] for i, l in enumerate(LINES)}
+OTCost = [1.5 * i for i in regCost]
+OT_COST = {l: OTCost[i] for i, l in enumerate(LINES)}
 
-OTCost= [1.5 * i for i in regCost]
-OTCostDict = {l : OTCost[i] for i,l in enumerate(lines)}
+# Optimize the planning
+solution = optimize_planning(CALENDAR, LINES, DAY_REQUIREMENTS, REG_COST, OT_COST)
 
-# Load variables (hours) - regular and overtime
-regHours = model.addVars(days, lines, lb = 7, ub = 8, vtype=gurobipy.GRB.INTEGER, name='regHours')
-OTHours = model.addVars(days, lines, lb = 0, ub = 4, vtype=gurobipy.GRB.INTEGER, name='OTHours')
+# Format the result
+optimized_planning = pd.DataFrame(index=LINES, columns=CALENDAR)
+for line in LINES:
+    for day in CALENDAR:
+        optimized_planning.at[line, day] = solution.loc["Total hours[" + str(day) + "," + str(line) + "]"][0]
 
-# Status of the line ( 0 = closed, 1 = opened)
-lineOpening = model.addVars(days, lines, vtype=gurobipy.GRB.BINARY, name='Open')
-
-# Variable total load (hours)
-totalHours = model.addVars(days, lines, lb = 0, ub = 12, vtype=gurobipy.GRB.INTEGER, name='totalHours')
-
-# Variable cost
-x = model.addVars(days, lines, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name='Cost')
-
-
-######     CONSTRAINTS     #####
-        
-# Set the value of cost (hours * hourly cost)
-costConstr = model.addConstrs((
-    (x[(i, j)] == regHours[(i, j)]*regCostDict[j]*lineOpening[(i, j)] + OTHours[(i, j)]*OTCostDict[j]*lineOpening[(i, j)] for i in days for j in lines)
-    ), name='costConstr')        
-        
-# Set the value of total load (regular + overtime)
-hoursConstr = model.addConstrs((
-    (totalHours[(i, j)] == (regHours[(i, j)] + OTHours[(i, j)])*lineOpening[(i, j)] for i in days for j in lines)
-    ), name='total_hours_constr') 
-        
-# Constraint : requirement = load of the 3 lines
-dayReqConstr = model.addConstrs((
-    ((totalHours).sum(d, '*') == dayRequirements[d] for d in days)
-     ), name='Requirements')
-        
-
-#####     DEFINE MODEL     #####
-
-model.ModelSense = gurobipy.GRB.MINIMIZE
-
-Cost = 0
-Cost += (gurobipy.quicksum(x[(i, j)] for i in days for j in lines))
-
-
-#####     SOLVE MODEL     #####
-
-model.setObjective(Cost)
-
-#model.write("Optimized_Scheduling.lp")
-#file = open("Optimized_Scheduling.lp", 'r')
-#print(file.read())
-#file.close()
-
-model.optimize()
-
-print('Total cost = $' + str(model.ObjVal))
-
-
-######     DISPLAY RESULTS     #####
-
-sol = pd.DataFrame(data={'Solution':model.X}, index=model.VarName)
-sol = sol.filter(like='totalHours', axis=0)
-
-dashboard = pd.DataFrame(index = lines, columns = days)
-for l in lines:
-    for d in days:
-        dashboard.at[l,d] = sol.loc['totalHours[' +str(d)+ ',' +str(l)+ ']'][0]
-        
-print(dashboard)
-
-
-#####     GRAPH     #####
-
-Load_Graph = dashboard.T
-Load_Graph['Min capacity'] = 7
-Load_Graph['Max capacity'] = 12
-
-my_colors = ['skyblue', 'salmon', 'lightgreen']
-
-_, ax = plt.subplots()
-Load_Graph[['Min capacity', 'Max capacity']].plot(rot=90, ax=ax, 
-                                                style=['b','b--'], linewidth=1)
-Load_Graph.drop(['Min capacity', 'Max capacity'], axis=1).plot(kind='bar', 
-                    title = 'Load in % per line',  ax=ax, color=my_colors)
-
-ax.tick_params(axis="x", labelsize=7)
-ax.tick_params(axis="y", labelsize=7)
-
-plt.savefig('LoadwithOT.pdf', bbox_inches='tight')
-
-#dashboard.copy().to_csv(r'C:/Users/soulba01/Desktop/Test_python/PlanningInteger.csv', index=True)
+# Plot the new planning
+plot_planning(optimized_planning, df_requirement)
