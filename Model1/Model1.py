@@ -9,103 +9,135 @@ Created on Mon Jul 27 15:09:01 2020
 import pandas as pd
 import gurobipy
 from matplotlib import pyplot as plt
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
 
-######     INITIALIZE THE MODEL     ######
+def generate_input():
+    # Define the daily requirement
+    calendar: List[str] = [
+        "2020/7/13",
+        "2020/7/14",
+        "2020/7/15",
+        "2020/7/16",
+        "2020/7/17",
+        "2020/7/18",
+        "2020/7/19",
+    ]
+    day_req: List[int] = [30, 10, 34, 23, 23, 24, 25]
+    day_requirements: Dict[str, int] = {day: day_req[i] for i, day in enumerate(calendar)}
 
-model = gurobipy.Model("Optimize production planning")
+    # Define the hourly cost per line
+    lines: List[str] = ["Curtain_C1", "Curtain_C2", "Curtain_C3"]
+    cost_temp: List[int] = [350, 300, 350]
+    cost_line = {line: cost_temp[i] for i, line in enumerate(lines)}
 
-
-######     INPUT     ######
-
-# Define the daily requirement
-CALENDAR: List[str] = ['2020/7/13', '2020/7/14', '2020/7/15',
-                       '2020/7/16', '2020/7/17', '2020/7/18',
-                       '2020/7/19']
-DAY_REQ: List[int] = [30, 10, 34, 23, 23, 24, 25]
-DAY_REQUIREMENTS: Dict[str, int] = {d: DAY_REQ[i] for i, d in enumerate(CALENDAR)}
-
-# Define the hourly cost per line
-LINES: List[str] = ['Curtain_C1', 'Curtain_C2', 'Curtain_C3']
-COST_temp: List[int] = [350, 300, 350]
-COST_LINE = {l : COST_temp[i] for i,l in enumerate(LINES)}
-
-
-######     DECISION VARIABLES     ######
-
-# Define time variables
-hours = model.addVars(CALENDAR, LINES, lb=7, ub=12, vtype=gurobipy.GRB.INTEGER, name='Hours')
-line_opening = model.addVars(CALENDAR, LINES, vtype=gurobipy.GRB.BINARY, name='Line opening')
-total_hours = model.addVars(CALENDAR, LINES, lb=0, ub=12, vtype=gurobipy.GRB.INTEGER, name='Total hours')
-
-model.addConstrs((
-    (total_hours[(i, j)] == hours[(i, j)] * line_opening[(i, j)] for i in CALENDAR for j in LINES)
-    ), name='total_hours_constr')
-
-# Define cost variable
-cost = model.addVars(CALENDAR, LINES, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name='Cost')
-
-for i in CALENDAR:
-    for j in LINES:
-        cost[(i, j)] = total_hours[(i, j)]*COST_LINE[j]
+    return calendar, lines, day_requirements, cost_line
 
 
-######     CONSTRAINTS     ######
+def optimize_planning(timeline, workcenters, needs, wc_cost):
+    # Initiate optimization model
+    model = gurobipy.Model("Optimize production planning")
 
-# Total requirement = total planned
-model.addConstrs((
-    ((total_hours).sum(d, '*') == DAY_REQUIREMENTS[d] for d in CALENDAR)
-     ), name='Requirements')
-        
+    # DEFINE VARIABLES
+    # Define time variables
+    hours = model.addVars(
+        timeline, workcenters, lb=7, ub=12, vtype=gurobipy.GRB.INTEGER, name="Hours"
+    )
+    line_opening = model.addVars(
+        timeline, workcenters, vtype=gurobipy.GRB.BINARY, name="Line opening"
+    )
+    total_hours = model.addVars(
+        timeline, workcenters, lb=0, ub=12, vtype=gurobipy.GRB.INTEGER, name="Total hours"
+    )
 
-######     DEFINE MODEL     ######
+    model.addConstrs(
+        (
+            (
+                total_hours[(i, j)] == hours[(i, j)] * line_opening[(i, j)]
+                for i in timeline
+                for j in workcenters
+            )
+        ),
+        name="total_hours_constr",
+    )
 
-model.ModelSense = gurobipy.GRB.MINIMIZE
+    # Define cost variable
+    cost = model.addVars(timeline, workcenters, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name="Cost")
 
-optimization_var = (gurobipy.quicksum(cost[(i, j)] for i in CALENDAR for j in LINES))
+    model.addConstrs(
+        (
+            (
+                cost[(i, j)] == total_hours[(i, j)] * wc_cost[j]
+                for i in timeline
+                for j in workcenters
+            )
+        )
+    )
 
-objective = 0
-objective += optimization_var
+    # CONSTRAINTS
+    # Total requirement = total planned
+    model.addConstrs(
+        (total_hours.sum(d, "*") == needs[d] for d in timeline),
+        name="Requirements",
+    )
+
+    # DEFINE MODEL
+    # Objective : minimize a function
+    model.ModelSense = gurobipy.GRB.MINIMIZE
+    # Function to minimize
+    optimization_var = gurobipy.quicksum(cost[(i, j)] for i in timeline for j in workcenters)
+    objective = 0
+    objective += optimization_var
+
+    # SOLVE MODEL
+    model.setObjective(objective)
+    model.optimize()
+    print("Total cost = $" + str(model.ObjVal))
+
+    sol = pd.DataFrame(data={"Solution": model.X}, index=model.VarName)
+    sol = sol.iloc[2 * len(cost): 3 * len(cost)]
+
+    return sol
 
 
-#####     SOLVE MODEL     #####
+def plot_planning(df):
+    Load_Graph = df.T
+    Load_Graph["Min capacity"] = 7
+    Load_Graph["Max capacity"] = 12
 
-model.setObjective(objective)
+    my_colors = ["skyblue", "salmon", "lightgreen"]
 
-model.optimize()
-print('Total cost = $' + str(model.ObjVal))
+    _, ax = plt.subplots()
+    Load_Graph[["Min capacity", "Max capacity"]].plot(
+        rot=90, ax=ax, style=["b", "b--"], linewidth=1
+    )
+
+    Load_Graph.drop(["Min capacity", "Max capacity"], axis=1).plot(
+        kind="bar", title="Load in h per line", ax=ax, color=my_colors
+    )
+
+    ax.tick_params(axis="x", labelsize=7)
+    ax.tick_params(axis="y", labelsize=7)
+
+    plt.savefig("Result_Model1.png", bbox_inches="tight", dpi=1200)
+    axe = plt.show()
+    return axe
 
 
-######     DISPLAY RESULTS     #####
+# Generate inputs
+CALENDAR = generate_input()[0]
+LINES = generate_input()[1]
+DAY_REQUIREMENTS = generate_input()[2]
+COST_LINE = generate_input()[3]
 
-sol = pd.DataFrame(data={'Solution': model.X}, index=model.VarName)
+# Optimize the planning
+solution = optimize_planning(CALENDAR, LINES, DAY_REQUIREMENTS, COST_LINE)
 
-sol = sol.iloc[2*len(cost):3*len(cost)]
+# Format the result
+optimized_planning = pd.DataFrame(index=LINES, columns=CALENDAR)
+for line in LINES:
+    for day in CALENDAR:
+        optimized_planning.at[line, day] = solution.loc["Total hours[" + str(day) + "," + str(line) + "]"][0]
 
-dashboard = pd.DataFrame(index=LINES, columns=CALENDAR)
-for l in LINES:
-    for c in CALENDAR:
-        dashboard.at[l, c] = sol.loc['Total hours[' + str(c) + ',' + str(l) + ']'][0]
-        
-print(dashboard)
-
-#####     GRAPH     #####
-
-Load_Graph = dashboard.T
-Load_Graph['Min capacity'] = 7
-Load_Graph['Max capacity'] = 12
-
-my_colors = ['skyblue', 'salmon', 'lightgreen']
-
-_, ax = plt.subplots()
-Load_Graph[['Min capacity', 'Max capacity']].plot(
-    rot=90, ax=ax, style=['b', 'b--'], linewidth=1)
-
-Load_Graph.drop(['Min capacity', 'Max capacity'], axis=1).plot(
-    kind='bar', title='Load in h per line',  ax=ax, color=my_colors)
-
-ax.tick_params(axis="x", labelsize=7)
-ax.tick_params(axis="y", labelsize=7)
-
-plt.savefig('Result_Model1.png', bbox_inches='tight', dpi=1200)
+# Plot the new planning
+plot_planning(optimized_planning)
