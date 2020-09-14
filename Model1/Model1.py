@@ -12,28 +12,6 @@ from matplotlib import pyplot as plt
 from typing import List, Dict
 
 
-def generate_input():
-    # Define the daily requirement
-    calendar: List[str] = [
-        "2020/7/13",
-        "2020/7/14",
-        "2020/7/15",
-        "2020/7/16",
-        "2020/7/17",
-        "2020/7/18",
-        "2020/7/19",
-    ]
-    day_req: List[int] = [30, 10, 34, 23, 23, 24, 25]
-    day_requirements: Dict[str, int] = {day: day_req[i] for i, day in enumerate(calendar)}
-
-    # Define the hourly cost per line
-    lines: List[str] = ["Curtain_C1", "Curtain_C2", "Curtain_C3"]
-    cost_temp: List[int] = [350, 300, 350]
-    cost_line = {line: cost_temp[i] for i, line in enumerate(lines)}
-
-    return calendar, lines, day_requirements, cost_line
-
-
 def optimize_planning(timeline, workcenters, needs, wc_cost):
     # Initiate optimization model
     model = gurobipy.Model("Optimize production planning")
@@ -101,18 +79,18 @@ def optimize_planning(timeline, workcenters, needs, wc_cost):
 
 
 def plot_planning(df):
-    Load_Graph = df.T
-    Load_Graph["Min capacity"] = 7
-    Load_Graph["Max capacity"] = 12
+    df = df.T
+    df["Min capacity"] = 7
+    df["Max capacity"] = 12
 
     my_colors = ["skyblue", "salmon", "lightgreen"]
 
     _, ax = plt.subplots()
-    Load_Graph[["Min capacity", "Max capacity"]].plot(
+    df[["Min capacity", "Max capacity"]].plot(
         rot=90, ax=ax, style=["b", "b--"], linewidth=1
     )
 
-    Load_Graph.drop(["Min capacity", "Max capacity"], axis=1).plot(
+    df.drop(["Min capacity", "Max capacity"], axis=1).plot(
         kind="bar", title="Load in h per line", ax=ax, color=my_colors
     )
 
@@ -125,10 +103,23 @@ def plot_planning(df):
 
 
 # Generate inputs
-CALENDAR = generate_input()[0]
-LINES = generate_input()[1]
-DAY_REQUIREMENTS = generate_input()[2]
-COST_LINE = generate_input()[3]
+# Define the daily requirement
+CALENDAR: List[str] = [
+    "2020/7/13",
+    "2020/7/14",
+    "2020/7/15",
+    "2020/7/16",
+    "2020/7/17",
+    "2020/7/18",
+    "2020/7/19",
+]
+day_req: List[int] = [30, 10, 34, 23, 23, 24, 25]
+DAY_REQUIREMENTS: Dict[str, int] = {day: day_req[i] for i, day in enumerate(CALENDAR)}
+
+# Define the hourly cost per line
+LINES: List[str] = ["Curtain_C1", "Curtain_C2", "Curtain_C3"]
+cost_temp: List[int] = [350, 300, 350]
+COST_LINE = {line: cost_temp[i] for i, line in enumerate(LINES)}
 
 # Optimize the planning
 solution = optimize_planning(CALENDAR, LINES, DAY_REQUIREMENTS, COST_LINE)
