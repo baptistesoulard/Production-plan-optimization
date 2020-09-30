@@ -14,7 +14,7 @@ Here is a brief introduction of each of these models:
 - Model 3:
   The concept of extra fee during weekends is added.  
 - Model 4:
-  In order to better optimize our planning, we now authorize to plan the production in advance, to reduce extracosts due to OT or weekends.
+  In order to better optimize our planning, we now allow to plan the production in advance, to reduce extracosts due to OT or weekends.
   Concept of storage cost is introduced.
 - Model 5:
   Optimization follow the same logic but the need comes from an Excel file extracted from and ERP.
