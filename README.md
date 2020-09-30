@@ -7,10 +7,10 @@ The example shown here is a manufacturing company that need to optimize its dail
 More and more constraints are considered from Model1 to Model8, the most sophisticated. 
 Here is a brief introduction of each of these models:
 - Model 1: 
-  Daily requirement in number of hours to allocate between 3 different production lines on the same day. 
-  Capacity is the same for each production line but not the hourly cost.
+  Daily requirement in number of hours to allocate between 3 different production lines, on the same day. 
+  Capacity is the same for each production line but not hourly cost. One production line can not be opened for less than 7hours or more than 12 hours.
 - Model 2:
-  The concept of overtime cost is added.
+  The concept of overtime cost is added. Hours worked from 8 to 12 hours are paid higher.
 - Model 3:
   The concept of extra fee during weekends is added.  
 - Model 4:
