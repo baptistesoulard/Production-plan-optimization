@@ -5,7 +5,7 @@ This project aims at providing a solution for planning optimization.
 The example shown here is a manufacturing company that need to optimize its daily production plan in order to reduce the costs.
 
 More and more constraints are considered from Model1 to Model8, the most sophisticated. 
-Here is a brief comment about each of these models:
+Here is a brief introduction of each of these models:
 - Model 1: 
   Daily requirement in number of hours to allocate between 3 different production lines on the same day. 
   Capacity is the same for each production line but not the hourly cost.
