@@ -1,34 +1,44 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Jul 27 15:09:01 2020
-
-@author: soulba01
+@author: Baptiste Soulard
 """
 
 # Import required packages
 import pandas as pd
 import gurobipy
-from matplotlib import pyplot as plt
 from typing import List, Dict
+import altair as alt
+import altair_saver
 
 
 def optimize_planning(
     timeline: List[str],
     workcenters: List[str],
     needs: Dict[str, int],
-    wc_cost: Dict[str, int],
+    wc_cost_reg: Dict[str, int],
 ) -> pd.DataFrame:
+
     # Initiate optimization model
     model = gurobipy.Model("Optimize production planning")
 
     # DEFINE VARIABLES
-    # Define time variables
-    hours = model.addVars(
-        timeline, workcenters, lb=7, ub=12, vtype=gurobipy.GRB.INTEGER, name="Hours"
+    # Variable total load (hours)
+    working_hours = model.addVars(
+        timeline,
+        workcenters,
+        lb=7,
+        ub=12,
+        vtype=gurobipy.GRB.INTEGER,
+        name="Working hours",
     )
+
+    # Status of the line ( 0 = closed, 1 = opened)
     line_opening = model.addVars(
-        timeline, workcenters, vtype=gurobipy.GRB.BINARY, name="Line opening"
+        timeline, workcenters, vtype=gurobipy.GRB.BINARY, name="Open status"
     )
+
+    # Variable total load (hours)
     total_hours = model.addVars(
         timeline,
         workcenters,
@@ -38,37 +48,38 @@ def optimize_planning(
         name="Total hours",
     )
 
-    model.addConstrs(
-        (
-            (
-                total_hours[(i, j)] == hours[(i, j)] * line_opening[(i, j)]
-                for i in timeline
-                for j in workcenters
-            )
-        ),
-        name="total_hours_constr",
-    )
-
-    # Define cost variable
-    cost = model.addVars(
-        timeline, workcenters, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name="Cost"
-    )
-
-    model.addConstrs(
-        (
-            (
-                cost[(i, j)] == total_hours[(i, j)] * wc_cost[j]
-                for i in timeline
-                for j in workcenters
-            )
-        )
+    # Variable cost
+    labor_cost = model.addVars(
+        timeline, workcenters, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name="Labor cost"
     )
 
     # CONSTRAINTS
-    # Total requirement = total planned
+    # Set the value of total load
     model.addConstrs(
-        (total_hours.sum(d, "*") == needs[d] for d in timeline),
-        name="Requirements",
+        (
+            total_hours[(date, wc)]
+            == working_hours[(date, wc)] * line_opening[(date, wc)]
+            for date in timeline
+            for wc in workcenters
+        ),
+        name="Link total hours - reg/ot hours",
+    )
+
+    # Set the value of cost (hours * hourly cost)
+    model.addConstrs(
+        (
+            labor_cost[(date, wc)]
+            == total_hours[(date, wc)] * wc_cost_reg[wc] * line_opening[(date, wc)]
+            for date in timeline
+            for wc in workcenters
+        ),
+        name="Link labor cost - working hours",
+    )
+
+    # Total load = requirement
+    model.addConstrs(
+        ((total_hours.sum(date, "*") == needs[date] for date in timeline)),
+        name="Link total hours - requirement",
     )
 
     # DEFINE MODEL
@@ -76,7 +87,7 @@ def optimize_planning(
     model.ModelSense = gurobipy.GRB.MINIMIZE
     # Function to minimize
     optimization_var = gurobipy.quicksum(
-        cost[(i, j)] for i in timeline for j in workcenters
+        labor_cost[(date, wc)] for date in timeline for wc in workcenters
     )
     objective = 0
     objective += optimization_var
@@ -84,79 +95,99 @@ def optimize_planning(
     # SOLVE MODEL
     model.setObjective(objective)
     model.optimize()
+
+    sol = pd.DataFrame(data={"Solution": model.X}, index=model.VarName)
+
     print("Total cost = $" + str(model.ObjVal))
-
-    solution = pd.DataFrame(data={"Solution": model.X}, index=model.VarName)
-    solution = solution.iloc[2 * len(cost) : 3 * len(cost)]
-
-    return solution
+    return sol
 
 
-def plot_planning(planning: pd.DataFrame, needs: pd.DataFrame) -> None:
-    planning = planning.T
-    planning["Min capacity"] = 7
-    planning["Max capacity"] = 12
+def plot_planning(planning, need, timeline):
+    # Plot graph - Requirement
+    source = need.copy()
+    source = source.rename(columns={0: "Hours"})
+    source["Date"] = source.index
 
-    my_colors = ["skyblue", "salmon", "lightgreen"]
-
-    fig, axs = plt.subplots(2)
-    needs.T.plot(
-        kind="bar",
-        width=0.2,
-        title="Need in h per day",
-        ax=axs[0],
-        color="midnightblue",
+    bars_need = (alt.Chart(source).mark_bar().encode(y="Hours:Q")).properties(
+        width=600 / len(timeline) - 22, height=120
     )
 
-    planning[["Min capacity", "Max capacity"]].plot(
-        rot=90, ax=axs[1], style=["b", "b--"], linewidth=1
+    text_need = bars_need.mark_text(
+        align="left", baseline="middle", dx=-8, dy=-7
+    ).encode(text="Hours:Q")
+
+    chart_need = (
+        alt.layer(bars_need, text_need, data=source)
+        .facet(column="Date:N")
+        .properties(title="Requirement")
     )
 
-    planning.drop(["Min capacity", "Max capacity"], axis=1).plot(
-        kind="bar", title="Load in h per line", ax=axs[1], color=my_colors
+    # Plot graph - Optimized planning
+    source = planning.filter(like="Total hours", axis=0).copy()
+    source["Date"] = list(source.index.values)
+    source = source.rename(columns={"Solution": "Hours"}).reset_index()
+    source[["Date", "Line"]] = source["Date"].str.split(",", expand=True)
+    source["Date"] = source["Date"].str.split("[").str[1]
+    source["Line"] = source["Line"].str.split("]").str[0]
+    source["Min capacity"] = 7
+    source["Max capacity"] = 12
+    source = source.round({"Hours": 1})
+
+    bars = (
+        alt.Chart(source)
+        .mark_bar()
+        .encode(
+            x="Line:N",
+            y="Hours:Q",
+            color="Line:N",
+        )
+        .properties(width=600 / len(timeline) - 22)
     )
 
-    axs[0].tick_params(axis="x", labelsize=7)
-    axs[0].tick_params(axis="y", labelsize=7)
-    axs[0].get_legend().remove()
-    axs[0].set_xticklabels([])
-    axs[1].tick_params(axis="x", labelsize=7)
-    axs[1].tick_params(axis="y", labelsize=7)
+    text = bars.mark_text(align="left", baseline="middle", dx=-8, dy=-7).encode(
+        text="Hours:Q"
+    )
 
-    plt.savefig("Result_Model1.png", bbox_inches="tight", dpi=1200)
-    plt.show()
+    line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
+
+    line_max = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Max capacity:Q")
+
+    chart_planning = (
+        alt.layer(bars, text, line_min, line_max, data=source)
+        .facet(column="Date:N")
+        .properties(title="Optimized Production Planning")
+    )
+
+    chart = alt.vconcat(chart_planning, chart_need)
+    chart.save("planning_time_model1.html")
 
 
-# Generate inputs
-# Define the daily requirement
-
+# Define daily requirement
 daily_requirements: Dict[str, int] = {
     "2020/7/13": 30,
     "2020/7/14": 10,
     "2020/7/15": 34,
-    "2020/7/16": 23,
+    "2020/7/16": 25,
     "2020/7/17": 23,
     "2020/7/18": 24,
     "2020/7/19": 25,
 }
 
 calendar: List[str] = list(daily_requirements.keys())
-daily_requirements_df = pd.DataFrame.from_dict(daily_requirements)
+daily_requirements_df = pd.DataFrame.from_dict(daily_requirements, orient="index")
 
-# Define the hourly cost per line
-costs_per_line = {"Curtain_C1": 350, "Curtain_C2": 300, "Curtain_C3": 350}
-lines: List[str] = list(costs_per_line.keys())
+# Define hourly cost per line - regular, overtime and weekend
+reg_costs_per_line = {"Line_1": 245, "Line_2": 315, "Line_3": 245}
 
-# Optimize the planning
-solution = optimize_planning(calendar, lines, daily_requirements, costs_per_line)
+lines: List[str] = list(reg_costs_per_line.keys())
 
-# Format the result
-optimized_planning = pd.DataFrame(index=lines, columns=calendar)
-for line in lines:
-    for day in calendar:
-        optimized_planning.at[line, day] = solution.loc[
-            "Total hours[" + str(day) + "," + str(line) + "]"
-        ][0]
+# Optimize planning
+solution = optimize_planning(
+    calendar,
+    lines,
+    daily_requirements,
+    reg_costs_per_line,
+)
 
 # Plot the new planning
-plot_planning(optimized_planning, daily_requirements_df)
+plot_planning(solution, daily_requirements_df, calendar)
