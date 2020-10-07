@@ -33,7 +33,7 @@ def optimize_planning(
         name="Working hours",
     )
 
-    # Status of the line ( 0 = closed, 1 = opened)
+    # Status of the line (0 = closed, 1 = opened)
     line_opening = model.addVars(
         timeline, workcenters, vtype=gurobipy.GRB.BINARY, name="Open status"
     )
@@ -99,6 +99,12 @@ def optimize_planning(
     sol = pd.DataFrame(data={"Solution": model.X}, index=model.VarName)
 
     print("Total cost = $" + str(model.ObjVal))
+
+    model.write("Planning_optimization.lp")
+    file = open("Planning_optimization.lp", 'r')
+    print(file.read())
+    file.close()
+
     return sol
 
 
@@ -109,7 +115,7 @@ def plot_planning(planning, need, timeline):
     source["Date"] = source.index
 
     bars_need = (alt.Chart(source).mark_bar().encode(y="Hours:Q")).properties(
-        width=600 / len(timeline) - 22, height=120
+        width=600 / len(timeline) - 22, height=90
     )
 
     text_need = bars_need.mark_text(
@@ -141,7 +147,7 @@ def plot_planning(planning, need, timeline):
             y="Hours:Q",
             color="Line:N",
         )
-        .properties(width=600 / len(timeline) - 22)
+        .properties(width=600 / len(timeline) - 22, height=200)
     )
 
     text = bars.mark_text(align="left", baseline="middle", dx=-8, dy=-7).encode(
@@ -162,7 +168,7 @@ def plot_planning(planning, need, timeline):
     chart.save("planning_time_model1.html")
 
 
-# Define daily requirement
+# Define daily requirement (hours/day)
 daily_requirements: Dict[str, int] = {
     "2020/7/13": 30,
     "2020/7/14": 10,
@@ -172,13 +178,15 @@ daily_requirements: Dict[str, int] = {
     "2020/7/18": 24,
     "2020/7/19": 25,
 }
-
-calendar: List[str] = list(daily_requirements.keys())
 daily_requirements_df = pd.DataFrame.from_dict(daily_requirements, orient="index")
 
-# Define hourly cost per line - regular, overtime and weekend
+# List of days on which we have to optimize our planning
+calendar: List[str] = list(daily_requirements.keys())
+
+# Define hourly cost per line - regular
 reg_costs_per_line = {"Line_1": 245, "Line_2": 315, "Line_3": 245}
 
+# List of production lines available
 lines: List[str] = list(reg_costs_per_line.keys())
 
 # Optimize planning
@@ -191,3 +199,4 @@ solution = optimize_planning(
 
 # Plot the new planning
 plot_planning(solution, daily_requirements_df, calendar)
+
