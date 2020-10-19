@@ -117,11 +117,10 @@ def optimize_planning(
     # Objective : minimize a function
     model.ModelSense = gurobipy.GRB.MINIMIZE
     # Function to minimize
-    optimization_var = gurobipy.quicksum(
+    objective = 0
+    objective += gurobipy.quicksum(
         labor_cost[(date, wc)] for date in timeline for wc in workcenters
     )
-    objective = 0
-    objective += optimization_var
 
     # SOLVE MODEL
     model.setObjective(objective)
@@ -190,7 +189,7 @@ def plot_planning(planning, need, timeline):
     )
 
     chart = alt.vconcat(chart_planning, chart_need)
-    chart.save("planning_time_model3.html")
+    chart.save("planning_time_model2.html")
 
 
 # Define daily requirement

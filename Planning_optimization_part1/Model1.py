@@ -9,7 +9,6 @@ import pandas as pd
 import gurobipy
 from typing import List, Dict
 import altair as alt
-import altair_saver
 
 
 def optimize_planning(
@@ -100,10 +99,10 @@ def optimize_planning(
 
     print("Total cost = $" + str(model.ObjVal))
 
-    model.write("Planning_optimization.lp")
-    file = open("Planning_optimization.lp", 'r')
-    print(file.read())
-    file.close()
+    #model.write("Planning_optimization.lp")
+    #file = open("Planning_optimization.lp", 'r')
+    #print(file.read())
+    #file.close()
 
     return sol
 
