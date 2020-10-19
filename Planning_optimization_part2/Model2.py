@@ -99,8 +99,7 @@ def optimize_planning(
 
     model.addConstrs(
         (
-            labor_cost[(date, wc)]
-            == total_hours[(date, wc)] * wc_cost_we[wc]
+            labor_cost[(date, wc)] == total_hours[(date, wc)] * wc_cost_we[wc]
             for date in weekend
             for wc in workcenters
         ),
@@ -132,7 +131,9 @@ def optimize_planning(
     return sol
 
 
-def plot_planning(planning, need, timeline):
+def plot_planning(
+    planning: pd.DataFrame, need: pd.DataFrame, timeline: pd.DataFrame
+) -> None:
     # Plot graph - Requirement
     source = need.copy()
     source = source.rename(columns={0: "Hours"})
@@ -229,4 +230,3 @@ solution = optimize_planning(
 
 # Plot the new planning
 plot_planning(solution, daily_requirements_df, calendar)
-

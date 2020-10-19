@@ -100,8 +100,7 @@ def optimize_planning(
 
     model.addConstrs(
         (
-            labor_cost[(date, wc)]
-            == total_hours[(date, wc)] * wc_cost_we[wc]
+            labor_cost[(date, wc)] == total_hours[(date, wc)] * wc_cost_we[wc]
             for date in weekend
             for wc in workcenters
         ),
@@ -112,7 +111,9 @@ def optimize_planning(
     for k in range(len(timeline)):
         model.addConstr(
             gurobipy.quicksum(
-                total_hours[(date, wc)] for date in timeline[: k + 1] for wc in workcenters
+                total_hours[(date, wc)]
+                for date in timeline[: k + 1]
+                for wc in workcenters
             )
             >= gurobipy.quicksum(needs[date] for date in timeline[: k + 1])
         )
@@ -139,15 +140,20 @@ def optimize_planning(
         model.addConstr(
             early_prod[timeline[k]]
             == gurobipy.quicksum(
-                    total_hours[(date, wc)] for date in timeline[: k + 1] for wc in workcenters
-                )
+                total_hours[(date, wc)]
+                for date in timeline[: k + 1]
+                for wc in workcenters
+            )
             - (gurobipy.quicksum(needs[date] for date in timeline[: k + 1]))
         )
 
     # Set the value of inventory costs
     for k in range(len(timeline)):
         model.addConstr(
-            (inventory_costs[timeline[k]] == early_prod[timeline[k]] * inventory_carrying_cost)
+            (
+                inventory_costs[timeline[k]]
+                == early_prod[timeline[k]] * inventory_carrying_cost
+            )
         )
 
     # DEFINE MODEL
@@ -168,18 +174,16 @@ def optimize_planning(
 
     print("Total cost = $" + str(model.ObjVal))
 
-    #model.write("Planning_optimization.lp")
-    #file = open("Planning_optimization.lp", 'r')
-    #print(file.read())
-    #file.close()
+    # model.write("Planning_optimization.lp")
+    # file = open("Planning_optimization.lp", 'r')
+    # print(file.read())
+    # file.close()
 
     return sol
 
 
 def plot_planning(
-        planning: pd.DataFrame,
-        need: pd.DataFrame,
-        timeline: pd.DataFrame
+    planning: pd.DataFrame, need: pd.DataFrame, timeline: pd.DataFrame
 ) -> None:
     # Plot graph - Requirement
     source = need.copy()
@@ -280,4 +284,3 @@ solution = optimize_planning(
 
 # Plot the new planning
 plot_planning(solution, daily_requirements_df, calendar)
-
