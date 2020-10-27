@@ -107,17 +107,6 @@ def optimize_planning(
         name="Link labor cost - working hours - we",
     )
 
-    # Constraint: requirement <= Load of the previous days
-    for k in range(len(timeline)):
-        model.addConstr(
-            gurobipy.quicksum(
-                total_hours[(date, wc)]
-                for date in timeline[: k + 1]
-                for wc in workcenters
-            )
-            >= gurobipy.quicksum(needs[date] for date in timeline[: k + 1])
-        )
-
     # Constraint: Total hours of production = required production time
     model.addConstr(
         gurobipy.quicksum(
@@ -147,15 +136,6 @@ def optimize_planning(
             - (gurobipy.quicksum(needs[date] for date in timeline[: k + 1]))
         )
 
-    # Set the value of inventory costs
-    for k in range(len(timeline)):
-        model.addConstr(
-            (
-                inventory_costs[timeline[k]]
-                == early_prod[timeline[k]] * inventory_carrying_cost
-            )
-        )
-
     # DEFINE MODEL
     # Objective : minimize a function
     model.ModelSense = gurobipy.GRB.MINIMIZE
@@ -164,7 +144,7 @@ def optimize_planning(
     objective += gurobipy.quicksum(
         labor_cost[(date, wc)] for date in timeline for wc in workcenters
     )
-    objective += gurobipy.quicksum(inventory_costs[date] for date in timeline)
+    objective += gurobipy.quicksum(early_prod[date] * inventory_carrying_cost for date in timeline)
 
     # SOLVE MODEL
     model.setObjective(objective)
