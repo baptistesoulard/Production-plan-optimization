@@ -120,10 +120,6 @@ def optimize_planning(
         timeline, lb=0, vtype=gurobipy.GRB.INTEGER, name="early prod"
     )
 
-    inventory_costs = model.addVars(
-        timeline, lb=0, vtype=gurobipy.GRB.INTEGER, name="inventory costs"
-    )
-
     # Set the value of gap for early production
     for k in range(len(timeline)):
         model.addConstr(
