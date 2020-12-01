@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    .error {
+        color: red;
+    }
+  </style>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm//vega@5"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm//vega-lite@4.8.1"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm//vega-embed@6"></script>
+</head>
+<body>
+  <div id="vis"></div>
+  <script>
+    (function(vegaEmbed) {
+      var spec = {"config": {"view": {"continuousWidth": 400, "continuousHeight": 300}}, "data": {"name": "data-18d13bae61f9c6ca9c305242a5971c8e"}, "facet": {"column": {"type": "nominal", "field": "Date"}}, "spec": {"layer": [{"mark": "bar", "encoding": {"color": {"type": "nominal", "field": "Line"}, "x": {"type": "nominal", "field": "Line"}, "y": {"type": "quantitative", "field": "Hours"}}, "height": 200, "width": 63.71428571428571}, {"mark": {"type": "text", "align": "left", "baseline": "middle", "dx": -8, "dy": -7}, "encoding": {"color": {"type": "nominal", "field": "Line"}, "text": {"type": "quantitative", "field": "Hours"}, "x": {"type": "nominal", "field": "Line"}, "y": {"type": "quantitative", "field": "Hours"}}, "height": 200, "width": 63.71428571428571}, {"mark": {"type": "rule", "color": "darkgrey"}, "encoding": {"y": {"type": "quantitative", "field": "Min capacity"}}}, {"mark": {"type": "rule", "color": "darkgrey"}, "encoding": {"y": {"type": "quantitative", "field": "Max capacity"}}}]}, "title": "Optimized Production Planning", "$schema": "https://vega.github.io/schema/vega-lite/v4.8.1.json", "datasets": {"data-18d13bae61f9c6ca9c305242a5971c8e": [{"index": "Total hours[2020/07/13,Line_1]", "Hours": 8.0, "Date": "2020/07/13", "Line": "Line_1", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/13,Line_2]", "Hours": 0.0, "Date": "2020/07/13", "Line": "Line_2", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/13,Line_3]", "Hours": 9.8, "Date": "2020/07/13", "Line": "Line_3", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/14,Line_1]", "Hours": 10.7, "Date": "2020/07/14", "Line": "Line_1", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/14,Line_2]", "Hours": 0.0, "Date": "2020/07/14", "Line": "Line_2", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/14,Line_3]", "Hours": 0.0, "Date": "2020/07/14", "Line": "Line_3", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/15,Line_1]", "Hours": 8.3, "Date": "2020/07/15", "Line": "Line_1", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/15,Line_2]", "Hours": 0.0, "Date": "2020/07/15", "Line": "Line_2", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/15,Line_3]", "Hours": 8.0, "Date": "2020/07/15", "Line": "Line_3", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/16,Line_1]", "Hours": 0.0, "Date": "2020/07/16", "Line": "Line_1", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/16,Line_2]", "Hours": 0.0, "Date": "2020/07/16", "Line": "Line_2", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/16,Line_3]", "Hours": 0.0, "Date": "2020/07/16", "Line": "Line_3", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/17,Line_1]", "Hours": 12.0, "Date": "2020/07/17", "Line": "Line_1", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/17,Line_2]", "Hours": 11.9, "Date": "2020/07/17", "Line": "Line_2", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/17,Line_3]", "Hours": 12.0, "Date": "2020/07/17", "Line": "Line_3", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/18,Line_1]", "Hours": 0.0, "Date": "2020/07/18", "Line": "Line_1", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/18,Line_2]", "Hours": 0.0, "Date": "2020/07/18", "Line": "Line_2", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/18,Line_3]", "Hours": 12.0, "Date": "2020/07/18", "Line": "Line_3", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/19,Line_1]", "Hours": 0.0, "Date": "2020/07/19", "Line": "Line_1", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/19,Line_2]", "Hours": 0.0, "Date": "2020/07/19", "Line": "Line_2", "Min capacity": 7, "Max capacity": 12}, {"index": "Total hours[2020/07/19,Line_3]", "Hours": 0.0, "Date": "2020/07/19", "Line": "Line_3", "Min capacity": 7, "Max capacity": 12}]}};
+      var embedOpt = {"mode": "vega-lite"};
+
+      function showError(el, error){
+          el.innerHTML = ('<div class="error" style="color:red;">'
+                          + '<p>JavaScript Error: ' + error.message + '</p>'
+                          + "<p>This usually means there's a typo in your chart specification. "
+                          + "See the javascript console for the full traceback.</p>"
+                          + '</div>');
+          throw error;
+      }
+      const el = document.getElementById('vis');
+      vegaEmbed("#vis", spec, embedOpt)
+        .catch(error => showError(el, error));
+    })(vegaEmbed);
+
+  </script>
+</body>
+</html>
