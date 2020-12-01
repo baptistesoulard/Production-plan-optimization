@@ -298,9 +298,7 @@ def optimize_planning(
     return sol
 
 
-def plot_load(
-    planning: pd.DataFrame, timeline: pd.DataFrame
-) -> None:
+def plot_load(planning: pd.DataFrame, timeline: pd.DataFrame) -> None:
 
     # Plot graph - Optimized planning
     source = planning.filter(like="Total hours", axis=0).copy()
@@ -341,46 +339,71 @@ def plot_load(
     chart_planning.save("planning_load_model4.html")
 
 
-def print_planning(
-    planning: pd.DataFrame
-) -> None:
+def print_planning(planning: pd.DataFrame) -> None:
 
-    df = planning.filter(like="plannedQty", axis=0).copy().rename(columns={'Solution': 'Qty'}).reset_index()
-    df[['Date', 'MO_No', 'Line']] = df['index'].str.split(',', expand=True)
-    df['Date'] = df['Date'].str.split('[').str[1]
-    df['Line'] = df['Line'].str.split(']').str[0]
-    df = df[['Date', 'Line', 'Qty', 'MO_No']]
+    df = (
+        planning.filter(like="plannedQty", axis=0)
+        .copy()
+        .rename(columns={"Solution": "Qty"})
+        .reset_index()
+    )
+    df[["Date", "MO_No", "Line"]] = df["index"].str.split(",", expand=True)
+    df["Date"] = df["Date"].str.split("[").str[1]
+    df["Line"] = df["Line"].str.split("]").str[0]
+    df = df[["Date", "Line", "Qty", "MO_No"]]
 
-    df.to_csv(r'Planning_model4_list.csv', index=True)
-    df.pivot_table(values='Qty', index='MO_No', columns=['Date', 'Line']).to_csv(r'Planning_model4v2.csv', index=True)
-
-
-def plot_planning(
-    planning: pd.DataFrame, need, timeline: pd.DataFrame
-) -> None:
-
-    # Plot graph - Requirement
-    source = pd.Series(need).rename_axis(['Date', 'MO_No']).reset_index(name='Qty')
-
-    chart_need = alt.Chart(source).mark_bar().encode(y=alt.Y('Qty', axis=alt.Axis(grid=False)),
-                                                column=alt.Column('Date:N'),
-                                                color='MO_No:N'
-                                                ).properties(
-        width=600 / len(timeline) - 22, height=90, title='test',
+    df.to_csv(r"Planning_model4_list.csv", index=True)
+    df.pivot_table(values="Qty", index="MO_No", columns=["Date", "Line"]).to_csv(
+        r"Planning_model4v2.csv", index=True
     )
 
-    df = planning.filter(like="plannedQty", axis=0).copy().rename(columns={'Solution': 'Qty'}).reset_index()
-    df[['Date', 'MO_No', 'Line']] = df['index'].str.split(',', expand=True)
-    df['Date'] = df['Date'].str.split('[').str[1]
-    df['Line'] = df['Line'].str.split(']').str[0]
-    df = df[['Date', 'Line', 'Qty', 'MO_No']]
 
-    chart_planning = alt.Chart(df).mark_bar().encode(y=alt.Y('Qty', axis=alt.Axis(grid=False)),
-                                            x='Line:N',
-                                            column=alt.Column('Date:N'),
-                                            color='MO_No:N'
-                                            ).properties(
-        width=600 / len(timeline) - 22, height=200, title='Optimized Curtain Planning', )
+def plot_planning(planning: pd.DataFrame, need, timeline: pd.DataFrame) -> None:
+
+    # Plot graph - Requirement
+    source = pd.Series(need).rename_axis(["Date", "MO_No"]).reset_index(name="Qty")
+
+    chart_need = (
+        alt.Chart(source)
+        .mark_bar()
+        .encode(
+            y=alt.Y("Qty", axis=alt.Axis(grid=False)),
+            column=alt.Column("Date:N"),
+            color="MO_No:N",
+        )
+        .properties(
+            width=600 / len(timeline) - 22,
+            height=90,
+            title="test",
+        )
+    )
+
+    df = (
+        planning.filter(like="plannedQty", axis=0)
+        .copy()
+        .rename(columns={"Solution": "Qty"})
+        .reset_index()
+    )
+    df[["Date", "MO_No", "Line"]] = df["index"].str.split(",", expand=True)
+    df["Date"] = df["Date"].str.split("[").str[1]
+    df["Line"] = df["Line"].str.split("]").str[0]
+    df = df[["Date", "Line", "Qty", "MO_No"]]
+
+    chart_planning = (
+        alt.Chart(df)
+        .mark_bar()
+        .encode(
+            y=alt.Y("Qty", axis=alt.Axis(grid=False)),
+            x="Line:N",
+            column=alt.Column("Date:N"),
+            color="MO_No:N",
+        )
+        .properties(
+            width=600 / len(timeline) - 22,
+            height=200,
+            title="Optimized Curtain Planning",
+        )
+    )
 
     chart = alt.vconcat(chart_planning, chart_need)
     chart.save("planning_time_model4.html")
