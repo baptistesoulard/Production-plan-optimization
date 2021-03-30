@@ -385,7 +385,7 @@ def plot_planning(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str
         .properties(
             width=600 / len(timeline) - 22,
             height=90,
-            title="test",
+            title="Requirement",
         )
     )
 
@@ -414,7 +414,7 @@ def plot_planning(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str
         .properties(
             width=600 / len(timeline) - 22,
             height=200,
-            title="Optimized Curtain Planning",
+            title="Optimized Production Planning",
         )
     )
 
