@@ -40,7 +40,7 @@ def optimize_planning(
 
     # DEFINE VARIABLES
     # Quantity and time variables
-    x_qty_var = model.addVars(
+    x_qty = model.addVars(
         timeline,
         manufacturing_orders,
         workcenters,
@@ -48,7 +48,7 @@ def optimize_planning(
         vtype=gurobipy.GRB.INTEGER,
         name="plannedQty",
     )
-    x_time_var = model.addVars(
+    x_time = model.addVars(
         timeline,
         manufacturing_orders,
         workcenters,
@@ -61,8 +61,8 @@ def optimize_planning(
     model.addConstrs(
         (
             (
-                x_time_var[(date, mo, wc)]
-                == x_qty_var[(date, mo, wc)] * cycle_times[(mo, wc)]
+                x_time[(date, mo, wc)]
+                == x_qty[(date, mo, wc)] * cycle_times[(mo, wc)]
                 for date in timeline
                 for mo in manufacturing_orders
                 for wc in workcenters
@@ -72,7 +72,7 @@ def optimize_planning(
     )
 
     # Qty to display
-    qty_var = model.addVars(
+    quantity = model.addVars(
         timeline, workcenters, lb=0, vtype=gurobipy.GRB.INTEGER, name="qty"
     )
 
@@ -80,9 +80,9 @@ def optimize_planning(
     model.addConstrs(
         (
             (
-                qty_var[(date, wc)]
+                quantity[(date, wc)]
                 == gurobipy.quicksum(
-                    x_qty_var[(date, mo, wc)] for mo in manufacturing_orders
+                    x_qty[(date, mo, wc)] for mo in manufacturing_orders
                 )
                 for date in timeline
                 for wc in workcenters
@@ -166,7 +166,7 @@ def optimize_planning(
             (
                 total_hours[(date, wc)]
                 == gurobipy.quicksum(
-                    x_time_var[(date, mo, wc)] for mo in manufacturing_orders
+                    x_time[(date, mo, wc)] for mo in manufacturing_orders
                 )
                 for date in timeline
                 for wc in workcenters
@@ -178,18 +178,14 @@ def optimize_planning(
     # Constraint: Total hours of production = required production time
     model.addConstr(
         (
-            (
-                gurobipy.quicksum(
-                    x_qty_var[(i, j, k)]
-                    for i in timeline
-                    for j in manufacturing_orders
-                    for k in workcenters
-                )
-                == (
-                    gurobipy.quicksum(
-                        needs[(i, j)] for i in timeline for j in manufacturing_orders
-                    )
-                )
+            gurobipy.quicksum(
+                x_qty[(date, mo, wc)]
+                for date in timeline
+                for mo in manufacturing_orders
+                for wc in workcenters
+            )
+            == gurobipy.quicksum(
+                needs[(date, mo)] for date in timeline for mo in manufacturing_orders
             )
         ),
         name="total_req",
@@ -204,21 +200,17 @@ def optimize_planning(
     )
 
     # Set the value of gap for early production
-    for l in range(len(timeline)):
+    for day in range(len(timeline)):
         model.addConstrs(
             (
-                (
-                    gap_prod[(timeline[l], j)]
-                    == (
-                        gurobipy.quicksum(
-                            x_qty_var[(i, j, k)]
-                            for i in timeline[: l + 1]
-                            for k in workcenters
-                        )
-                    )
-                    - (gurobipy.quicksum(needs[(i, j)] for i in timeline[: l + 1]))
-                    for j in manufacturing_orders
+                gap_prod[(timeline[day], mo)]
+                == gurobipy.quicksum(
+                    x_qty[(date, mo, wc)]
+                    for date in timeline[: day + 1]
+                    for wc in workcenters
                 )
+                - gurobipy.quicksum(needs[(date, mo)] for date in timeline[: day + 1])
+                for mo in manufacturing_orders
             ),
             name="gap_prod",
         )
@@ -226,9 +218,9 @@ def optimize_planning(
     # Set the value of ABS(gap for early production)
     model.addConstrs(
         (
-            (abs_gap_prod[(i, j)] == gurobipy.abs_(gap_prod[(i, j)]))
-            for i in timeline
-            for j in manufacturing_orders
+            (abs_gap_prod[(date, mo)] == gurobipy.abs_(gap_prod[(date, mo)]))
+            for date in timeline
+            for mo in manufacturing_orders
         ),
         name="abs_gap_prod",
     )
@@ -241,9 +233,12 @@ def optimize_planning(
     # Set the value of gap for early production
     model.addConstrs(
         (
-            (early_prod[(i, j)] == (gap_prod[(i, j)] + abs_gap_prod[(i, j)]) / 2)
-            for i in timeline
-            for j in manufacturing_orders
+            (
+                early_prod[(date, mo)]
+                == (gap_prod[(date, mo)] + abs_gap_prod[(date, mo)]) / 2
+            )
+            for date in timeline
+            for mo in manufacturing_orders
         ),
         name="early_prod",
     )
@@ -253,12 +248,15 @@ def optimize_planning(
         timeline, manufacturing_orders, vtype=gurobipy.GRB.CONTINUOUS, name="lateProd"
     )
 
-    # Set the value of gap for lateproduction
+    # Set the value of gap for late production
     model.addConstrs(
         (
-            (late_prod[(i, j)] == (gap_prod[(i, j)] - abs_gap_prod[(i, j)]) / 2)
-            for i in timeline
-            for j in manufacturing_orders
+            (
+                late_prod[(date, mo)]
+                == (gap_prod[(date, mo)] - abs_gap_prod[(date, mo)]) / 2
+            )
+            for date in timeline
+            for mo in manufacturing_orders
         ),
         name="late_prod",
     )
@@ -266,6 +264,7 @@ def optimize_planning(
     # DEFINE MODEL
     # Objective : minimize a function
     model.ModelSense = gurobipy.GRB.MINIMIZE
+
     # Function to minimize
     objective = 0
     objective += gurobipy.quicksum(
@@ -298,11 +297,33 @@ def optimize_planning(
     return sol
 
 
-def plot_load(planning: pd.DataFrame, timeline: pd.DataFrame) -> None:
+def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -> None:
+
+    # Plot graph - Requirement
+    source = pd.Series(need).rename_axis(["Date", "MO_No"]).reset_index(name="Qty")
+    source = source.groupby(["Date"]).sum()
+    source["Date"] = source.index
+
+    chart_need = (
+        alt.Chart(source)
+        .mark_bar()
+        .encode(
+            y=alt.Y("Qty", axis=alt.Axis(grid=False)),
+            column=alt.Column("Date:N"),
+            tooltip=["Qty"],
+        )
+        .interactive()
+        .properties(
+            width=600 / len(calendar) - 22,
+            height=90,
+            title="Requirement",
+        )
+    )
 
     # Plot graph - Optimized planning
     source = planning.filter(like="Total hours", axis=0).copy()
-    source["Date"] = list(source.index.values)
+    source["Date"] = source.index
+    source = source.reset_index(drop=True)
     source = source.rename(columns={"Solution": "Hours"}).reset_index()
     source[["Date", "Line"]] = source["Date"].str.split(",", expand=True)
     source["Date"] = source["Date"].str.split("[").str[1]
@@ -310,6 +331,10 @@ def plot_load(planning: pd.DataFrame, timeline: pd.DataFrame) -> None:
     source["Min capacity"] = 7
     source["Max capacity"] = 12
     source = source.round({"Hours": 1})
+    source["Load%"] = pd.Series(
+        ["{0:.0f}%".format(val / 8 * 100) for val in source["Hours"]],
+        index=source.index,
+    )
 
     bars = (
         alt.Chart(source)
@@ -318,47 +343,31 @@ def plot_load(planning: pd.DataFrame, timeline: pd.DataFrame) -> None:
             x="Line:N",
             y="Hours:Q",
             color="Line:N",
+            tooltip=["Date", "Line", "Hours", "Load%"],
         )
+        .interactive()
         .properties(width=600 / len(timeline) - 22, height=200)
-    )
-
-    text = bars.mark_text(align="left", baseline="middle", dx=-8, dy=-7).encode(
-        text="Hours:Q"
     )
 
     line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
 
-    line_max = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Max capacity:Q")
+    line_max = (
+        alt.Chart(source)
+        .mark_rule(color="darkgrey")
+        .encode(y=alt.Y("Max capacity:Q", title="Load"))
+    )
 
     chart_planning = (
-        alt.layer(bars, text, line_min, line_max, data=source)
+        alt.layer(bars, line_min, line_max, data=source)
         .facet(column="Date:N")
         .properties(title="Optimized Production Planning")
     )
 
-    chart_planning.save("planning_load_model4.html")
+    chart = alt.vconcat(chart_planning, chart_need)
+    chart.save("planning_load_model4.html")
 
 
-def print_planning(planning: pd.DataFrame) -> None:
-
-    df = (
-        planning.filter(like="plannedQty", axis=0)
-        .copy()
-        .rename(columns={"Solution": "Qty"})
-        .reset_index()
-    )
-    df[["Date", "MO_No", "Line"]] = df["index"].str.split(",", expand=True)
-    df["Date"] = df["Date"].str.split("[").str[1]
-    df["Line"] = df["Line"].str.split("]").str[0]
-    df = df[["Date", "Line", "Qty", "MO_No"]]
-
-    df.to_csv(r"Planning_model4_list.csv", index=True)
-    df.pivot_table(values="Qty", index="MO_No", columns=["Date", "Line"]).to_csv(
-        r"Planning_model4v2.csv", index=True
-    )
-
-
-def plot_planning(planning: pd.DataFrame, need, timeline: pd.DataFrame) -> None:
+def plot_planning(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -> None:
 
     # Plot graph - Requirement
     source = pd.Series(need).rename_axis(["Date", "MO_No"]).reset_index(name="Qty")
@@ -370,7 +379,9 @@ def plot_planning(planning: pd.DataFrame, need, timeline: pd.DataFrame) -> None:
             y=alt.Y("Qty", axis=alt.Axis(grid=False)),
             column=alt.Column("Date:N"),
             color="MO_No:N",
+            tooltip=["MO_No", "Qty"],
         )
+        .interactive()
         .properties(
             width=600 / len(timeline) - 22,
             height=90,
@@ -397,7 +408,9 @@ def plot_planning(planning: pd.DataFrame, need, timeline: pd.DataFrame) -> None:
             x="Line:N",
             column=alt.Column("Date:N"),
             color="MO_No:N",
+            tooltip=["Line", "MO_No", "Qty"],
         )
+        .interactive()
         .properties(
             width=600 / len(timeline) - 22,
             height=200,
@@ -406,65 +419,27 @@ def plot_planning(planning: pd.DataFrame, need, timeline: pd.DataFrame) -> None:
     )
 
     chart = alt.vconcat(chart_planning, chart_need)
-    chart.save("planning_time_model4.html")
+    chart.save("planning_MO_model4.html")
 
 
-# Define daily requirement
-# Calendar
-days_list = [
-    "2020/07/13",
-    "2020/07/14",
-    "2020/07/15",
-    "2020/07/16",
-    "2020/07/17",
-    "2020/07/18",
-    "2020/07/19",
-]
+def print_planning(planning: pd.DataFrame) -> None:
 
-# Get MO List
-MO_file = "Requirement.xlsx"
-MO_df = pd.read_excel(MO_file)
-MO_list = MO_df["MO_No"].to_list()
+    df = (
+        planning.filter(like="plannedQty", axis=0)
+        .copy()
+        .rename(columns={"Solution": "Qty"})
+        .reset_index()
+    )
+    df[["Date", "MO_No", "Line"]] = df["index"].str.split(",", expand=True)
+    df["Date"] = df["Date"].str.split("[").str[1]
+    df["Line"] = df["Line"].str.split("]").str[0]
+    df = df[["Date", "Line", "Qty", "MO_No"]]
 
-# Get cycle times
-constraints_file = "Constraints.xlsx"
-capacity_df = pd.read_excel(constraints_file, sheet_name="9.5h capacity").set_index(
-    "Line"
-)
-cycleTime_df = capacity_df.rdiv(9.5)
+    df.to_csv(r"Planning_model4_list.csv", index=True)
+    df.pivot_table(values="Qty", index="MO_No", columns=["Date", "Line"]).to_csv(
+        r"Planning_model4v2.csv", index=True
+    )
 
-# Combine MO and cycle times
-MO_df = MO_df.merge(cycleTime_df, left_on="MPS_Family", right_index=True)
-
-MO_df = MO_df.rename(columns={"Line_1": "CT_1", "Line_2": "CT_2", "Line_3": "CT_3"})
-
-MO_df["Planned_Finish_Date"] = pd.to_datetime(MO_df["Planned_Finish_Date"]).dt.strftime(
-    "%Y/%m/%d"
-)
-MO_df = MO_df.sort_values(by=["Planned_Finish_Date", "MO_No"])
-
-dayReq_df = MO_df[["MO_No", "Qty", "Planned_Finish_Date"]]
-
-temp = ["temp" for _ in range(len(days_list))]
-xtra = {"MO_No": temp, "Planned_Finish_Date": days_list}
-
-dayReq_df = dayReq_df.append(pd.DataFrame(xtra))
-
-dayReq_df = dayReq_df.pivot(index="MO_No", columns="Planned_Finish_Date", values="Qty")
-dayReq_df = dayReq_df.drop("temp", axis=0).fillna(0)
-
-daily_requirements = {(i, j): dayReq_df[i][j] for i in days_list for j in MO_list}
-
-calendar = [
-    "2020/07/13",
-    "2020/07/14",
-    "2020/07/15",
-    "2020/07/16",
-    "2020/07/17",
-    "2020/07/18",
-    "2020/07/19",
-]
-daily_requirements_df = pd.DataFrame.from_dict(daily_requirements, orient="index")
 
 # Define hourly cost per line - regular, overtime and weekend
 reg_costs_per_line = {"Line_1": 245, "Line_2": 315, "Line_3": 245}
@@ -480,11 +455,82 @@ late_prod_cost = 1000
 
 lines: List[str] = list(reg_costs_per_line.keys())
 
-CT_df = MO_df[["MO_No", "CT_1", "CT_2", "CT_3"]]
+# Get cycle times
+capacity = pd.read_excel("Constraints.xlsx", sheet_name="9.5h capacity").set_index(
+    "Line"
+)
+cycle_time = capacity.rdiv(9.5)
+
+# Get MO List
+manufacturing_orders = pd.read_excel("Requirement.xlsx")
+MO_list = manufacturing_orders["MO_No"].to_list()
+
+
+def check_duplicates(list_to_check):
+    if len(list_to_check) == len(set(list_to_check)):
+        return
+    else:
+        print("Duplicate MO, please check the requirements file")
+        exit()
+        return
+
+
+check_duplicates(MO_list)
+
+# Combine MO and cycle times
+manufacturing_orders = manufacturing_orders.merge(
+    cycle_time, left_on="MPS_Family", right_index=True
+)
+manufacturing_orders = manufacturing_orders.rename(
+    columns={"Line_1": "CT_1", "Line_2": "CT_2", "Line_3": "CT_3"}
+)
+manufacturing_orders["Planned_Finish_Date"] = pd.to_datetime(
+    manufacturing_orders["Planned_Finish_Date"]
+).dt.strftime("%Y/%m/%d")
+manufacturing_orders = manufacturing_orders.sort_values(
+    by=["Planned_Finish_Date", "MO_No"]
+)
+
+CT_df = manufacturing_orders[["MO_No", "CT_1", "CT_2", "CT_3"]]
 CT_df = CT_df.set_index("MO_No")
 CT_dict = {
     (m, l): CT_df.iloc[j][k] for j, m in enumerate(MO_list) for k, l in enumerate(lines)
 }
+
+# Define calendar
+start_date = datetime.datetime.strptime(
+    manufacturing_orders["Planned_Finish_Date"].min(), "%Y/%m/%d"
+)
+end_date = datetime.datetime.strptime(
+    manufacturing_orders["Planned_Finish_Date"].max(), "%Y/%m/%d"
+)
+
+date_modified = start_date
+calendar = [start_date.strftime("%Y/%m/%d")]
+
+while date_modified < end_date:
+    date_modified += datetime.timedelta(days=1)
+    calendar.append(date_modified.strftime("%Y/%m/%d"))
+
+# Define daily requirement dataframe
+manufacturing_orders = manufacturing_orders[["MO_No", "Qty", "Planned_Finish_Date"]]
+manufacturing_orders = manufacturing_orders.append(
+    pd.DataFrame(
+        {
+            "MO_No": ["temp" for _ in range(len(calendar))],
+            "Planned_Finish_Date": calendar,
+        }
+    )
+)
+manufacturing_orders = manufacturing_orders.pivot(
+    index="MO_No", columns="Planned_Finish_Date", values="Qty"
+)
+manufacturing_orders = manufacturing_orders.drop("temp", axis=0).fillna(0)
+
+daily_requirements = {
+    (i, j): manufacturing_orders[i][j] for i in calendar for j in MO_list
+}
+daily_requirements_df = pd.DataFrame.from_dict(daily_requirements, orient="index")
 
 # Optimize planning
 solution = optimize_planning(
@@ -501,6 +547,6 @@ solution = optimize_planning(
 )
 
 # Plot the new planning
-plot_load(solution, calendar)
+plot_load(solution, daily_requirements, calendar)
 print_planning(solution)
 plot_planning(solution, daily_requirements, calendar)
