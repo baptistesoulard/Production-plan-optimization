@@ -454,12 +454,12 @@ late_prod_cost = 1000
 
 lines: List[str] = list(reg_costs_per_line.keys())
 
+# Get orders
+customer_orders = pd.read_excel("Customer_orders.xlsx")
+
 # Get cycle times
 capacity = pd.read_excel("Constraints.xlsx", sheet_name="8h capacity").set_index("Line")
 cycle_time = capacity.rdiv(8)
-
-# Get orders
-customer_orders = pd.read_excel("Customer_orders.xlsx")
 
 
 def check_duplicates(list_to_check):
