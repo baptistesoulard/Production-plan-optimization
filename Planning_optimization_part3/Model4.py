@@ -20,7 +20,7 @@ def optimize_planning(
     wc_cost_ot: Dict[str, int],
     wc_cost_we: Dict[str, int],
     inventory_carrying_cost: int,
-    manufacturing_orders: List[str],
+    customer_orders: List[str],
     cycle_times,
     delay_cost: int,
 ) -> pd.DataFrame:
@@ -42,7 +42,7 @@ def optimize_planning(
     # Quantity and time variables
     x_qty = model.addVars(
         timeline,
-        manufacturing_orders,
+        customer_orders,
         workcenters,
         lb=0,
         vtype=gurobipy.GRB.INTEGER,
@@ -50,7 +50,7 @@ def optimize_planning(
     )
     x_time = model.addVars(
         timeline,
-        manufacturing_orders,
+        customer_orders,
         workcenters,
         lb=0,
         vtype=gurobipy.GRB.CONTINUOUS,
@@ -61,10 +61,9 @@ def optimize_planning(
     model.addConstrs(
         (
             (
-                x_time[(date, mo, wc)]
-                == x_qty[(date, mo, wc)] * cycle_times[(mo, wc)]
+                x_time[(date, mo, wc)] == x_qty[(date, mo, wc)] * cycle_times[(mo, wc)]
                 for date in timeline
-                for mo in manufacturing_orders
+                for mo in customer_orders
                 for wc in workcenters
             )
         ),
@@ -81,9 +80,7 @@ def optimize_planning(
         (
             (
                 quantity[(date, wc)]
-                == gurobipy.quicksum(
-                    x_qty[(date, mo, wc)] for mo in manufacturing_orders
-                )
+                == gurobipy.quicksum(x_qty[(date, mo, wc)] for mo in customer_orders)
                 for date in timeline
                 for wc in workcenters
             )
@@ -165,9 +162,7 @@ def optimize_planning(
         (
             (
                 total_hours[(date, wc)]
-                == gurobipy.quicksum(
-                    x_time[(date, mo, wc)] for mo in manufacturing_orders
-                )
+                == gurobipy.quicksum(x_time[(date, mo, wc)] for mo in customer_orders)
                 for date in timeline
                 for wc in workcenters
             )
@@ -181,11 +176,11 @@ def optimize_planning(
             gurobipy.quicksum(
                 x_qty[(date, mo, wc)]
                 for date in timeline
-                for mo in manufacturing_orders
+                for mo in customer_orders
                 for wc in workcenters
             )
             == gurobipy.quicksum(
-                needs[(date, mo)] for date in timeline for mo in manufacturing_orders
+                needs[(date, mo)] for date in timeline for mo in customer_orders
             )
         ),
         name="total_req",
@@ -193,10 +188,10 @@ def optimize_planning(
 
     # Gap early/late production
     gap_prod = model.addVars(
-        timeline, manufacturing_orders, vtype=gurobipy.GRB.CONTINUOUS, name="gapProd"
+        timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="gapProd"
     )
     abs_gap_prod = model.addVars(
-        timeline, manufacturing_orders, vtype=gurobipy.GRB.CONTINUOUS, name="absGapProd"
+        timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="absGapProd"
     )
 
     # Set the value of gap for early production
@@ -210,7 +205,7 @@ def optimize_planning(
                     for wc in workcenters
                 )
                 - gurobipy.quicksum(needs[(date, mo)] for date in timeline[: day + 1])
-                for mo in manufacturing_orders
+                for mo in customer_orders
             ),
             name="gap_prod",
         )
@@ -220,14 +215,14 @@ def optimize_planning(
         (
             (abs_gap_prod[(date, mo)] == gurobipy.abs_(gap_prod[(date, mo)]))
             for date in timeline
-            for mo in manufacturing_orders
+            for mo in customer_orders
         ),
         name="abs_gap_prod",
     )
 
     # Definition gap early production
     early_prod = model.addVars(
-        timeline, manufacturing_orders, vtype=gurobipy.GRB.CONTINUOUS, name="earlyProd"
+        timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="earlyProd"
     )
 
     # Set the value of gap for early production
@@ -238,14 +233,14 @@ def optimize_planning(
                 == (gap_prod[(date, mo)] + abs_gap_prod[(date, mo)]) / 2
             )
             for date in timeline
-            for mo in manufacturing_orders
+            for mo in customer_orders
         ),
         name="early_prod",
     )
 
     # Gap late production
     late_prod = model.addVars(
-        timeline, manufacturing_orders, vtype=gurobipy.GRB.CONTINUOUS, name="lateProd"
+        timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="lateProd"
     )
 
     # Set the value of gap for late production
@@ -256,7 +251,7 @@ def optimize_planning(
                 == (gap_prod[(date, mo)] - abs_gap_prod[(date, mo)]) / 2
             )
             for date in timeline
-            for mo in manufacturing_orders
+            for mo in customer_orders
         ),
         name="late_prod",
     )
@@ -273,12 +268,12 @@ def optimize_planning(
     objective += gurobipy.quicksum(
         early_prod[(date, mo)] * inventory_carrying_cost
         for date in timeline
-        for mo in manufacturing_orders
+        for mo in customer_orders
     )
     objective += gurobipy.quicksum(
         late_prod[(date, mo)] * delay_cost
         for date in timeline
-        for mo in manufacturing_orders
+        for mo in customer_orders
     )
 
     # SOLVE MODEL
@@ -300,7 +295,9 @@ def optimize_planning(
 def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -> None:
 
     # Plot graph - Requirement
-    source = pd.Series(need).rename_axis(["Date", "MO_No"]).reset_index(name="Qty")
+    source = (
+        pd.Series(need).rename_axis(["Date", "Customer_Order"]).reset_index(name="Qty")
+    )
     source = source.groupby(["Date"]).sum()
     source["Date"] = source.index
 
@@ -367,10 +364,12 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
     chart.save("planning_load_model4.html")
 
 
-def plot_planning(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -> None:
+def plot_planning(
+    planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]
+) -> None:
 
     # Plot graph - Requirement
-    source = pd.Series(need).rename_axis(["Date", "MO_No"]).reset_index(name="Qty")
+    source = pd.Series(need).rename_axis(["Date", "Order"]).reset_index(name="Qty")
 
     chart_need = (
         alt.Chart(source)
@@ -378,8 +377,8 @@ def plot_planning(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str
         .encode(
             y=alt.Y("Qty", axis=alt.Axis(grid=False)),
             column=alt.Column("Date:N"),
-            color="MO_No:N",
-            tooltip=["MO_No", "Qty"],
+            color="Order:N",
+            tooltip=["Order", "Qty"],
         )
         .interactive()
         .properties(
@@ -395,10 +394,10 @@ def plot_planning(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str
         .rename(columns={"Solution": "Qty"})
         .reset_index()
     )
-    df[["Date", "MO_No", "Line"]] = df["index"].str.split(",", expand=True)
+    df[["Date", "Order", "Line"]] = df["index"].str.split(",", expand=True)
     df["Date"] = df["Date"].str.split("[").str[1]
     df["Line"] = df["Line"].str.split("]").str[0]
-    df = df[["Date", "Line", "Qty", "MO_No"]]
+    df = df[["Date", "Line", "Qty", "Order"]]
 
     chart_planning = (
         alt.Chart(df)
@@ -407,8 +406,8 @@ def plot_planning(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str
             y=alt.Y("Qty", axis=alt.Axis(grid=False)),
             x="Line:N",
             column=alt.Column("Date:N"),
-            color="MO_No:N",
-            tooltip=["Line", "MO_No", "Qty"],
+            color="Order:N",
+            tooltip=["Line", "Order", "Qty"],
         )
         .interactive()
         .properties(
@@ -430,15 +429,15 @@ def print_planning(planning: pd.DataFrame) -> None:
         .rename(columns={"Solution": "Qty"})
         .reset_index()
     )
-    df[["Date", "MO_No", "Line"]] = df["index"].str.split(",", expand=True)
+    df[["Date", "Customer_Order", "Line"]] = df["index"].str.split(",", expand=True)
     df["Date"] = df["Date"].str.split("[").str[1]
     df["Line"] = df["Line"].str.split("]").str[0]
-    df = df[["Date", "Line", "Qty", "MO_No"]]
+    df = df[["Date", "Line", "Qty", "Customer_Order"]]
 
     df.to_csv(r"Planning_model4_list.csv", index=True)
-    df.pivot_table(values="Qty", index="MO_No", columns=["Date", "Line"]).to_csv(
-        r"Planning_model4v2.csv", index=True
-    )
+    df.pivot_table(
+        values="Qty", index="Customer_Order", columns=["Date", "Line"]
+    ).to_csv(r"Planning_model4v2.csv", index=True)
 
 
 # Define hourly cost per line - regular, overtime and weekend
@@ -456,53 +455,51 @@ late_prod_cost = 1000
 lines: List[str] = list(reg_costs_per_line.keys())
 
 # Get cycle times
-capacity = pd.read_excel("Constraints.xlsx", sheet_name="9.5h capacity").set_index(
-    "Line"
-)
-cycle_time = capacity.rdiv(9.5)
+capacity = pd.read_excel("Constraints.xlsx", sheet_name="8h capacity").set_index("Line")
+cycle_time = capacity.rdiv(8)
 
-# Get MO List
-manufacturing_orders = pd.read_excel("Requirement.xlsx")
-MO_list = manufacturing_orders["MO_No"].to_list()
+# Get orders
+customer_orders = pd.read_excel("Customer_orders.xlsx")
 
 
 def check_duplicates(list_to_check):
     if len(list_to_check) == len(set(list_to_check)):
         return
     else:
-        print("Duplicate MO, please check the requirements file")
+        print("Duplicate order, please check the requirements file")
         exit()
         return
 
 
-check_duplicates(MO_list)
+order_list = customer_orders["Order"].to_list()
+check_duplicates(order_list)
 
 # Combine MO and cycle times
-manufacturing_orders = manufacturing_orders.merge(
-    cycle_time, left_on="MPS_Family", right_index=True
+customer_orders = customer_orders.merge(
+    cycle_time, left_on="Product_Family", right_index=True
 )
-manufacturing_orders = manufacturing_orders.rename(
+customer_orders = customer_orders.rename(
     columns={"Line_1": "CT_1", "Line_2": "CT_2", "Line_3": "CT_3"}
 )
-manufacturing_orders["Planned_Finish_Date"] = pd.to_datetime(
-    manufacturing_orders["Planned_Finish_Date"]
+customer_orders["Delivery_Date"] = pd.to_datetime(
+    customer_orders["Delivery_Date"]
 ).dt.strftime("%Y/%m/%d")
-manufacturing_orders = manufacturing_orders.sort_values(
-    by=["Planned_Finish_Date", "MO_No"]
-)
+customer_orders = customer_orders.sort_values(by=["Delivery_Date", "Order"])
 
-CT_df = manufacturing_orders[["MO_No", "CT_1", "CT_2", "CT_3"]]
-CT_df = CT_df.set_index("MO_No")
+CT_df = customer_orders[["Order", "CT_1", "CT_2", "CT_3"]]
+CT_df = CT_df.set_index("Order")
 CT_dict = {
-    (m, l): CT_df.iloc[j][k] for j, m in enumerate(MO_list) for k, l in enumerate(lines)
+    (m, l): CT_df.iloc[j][k]
+    for j, m in enumerate(order_list)
+    for k, l in enumerate(lines)
 }
 
 # Define calendar
 start_date = datetime.datetime.strptime(
-    manufacturing_orders["Planned_Finish_Date"].min(), "%Y/%m/%d"
+    customer_orders["Delivery_Date"].min(), "%Y/%m/%d"
 )
 end_date = datetime.datetime.strptime(
-    manufacturing_orders["Planned_Finish_Date"].max(), "%Y/%m/%d"
+    customer_orders["Delivery_Date"].max(), "%Y/%m/%d"
 )
 
 date_modified = start_date
@@ -513,22 +510,22 @@ while date_modified < end_date:
     calendar.append(date_modified.strftime("%Y/%m/%d"))
 
 # Define daily requirement dataframe
-manufacturing_orders = manufacturing_orders[["MO_No", "Qty", "Planned_Finish_Date"]]
-manufacturing_orders = manufacturing_orders.append(
+customer_orders = customer_orders[["Order", "Quantity", "Delivery_Date"]]
+customer_orders = customer_orders.append(
     pd.DataFrame(
         {
-            "MO_No": ["temp" for _ in range(len(calendar))],
-            "Planned_Finish_Date": calendar,
+            "Order": ["temp" for _ in range(len(calendar))],
+            "Delivery_Date": calendar,
         }
     )
 )
-manufacturing_orders = manufacturing_orders.pivot(
-    index="MO_No", columns="Planned_Finish_Date", values="Qty"
+customer_orders = customer_orders.pivot(
+    index="Order", columns="Delivery_Date", values="Quantity"
 )
-manufacturing_orders = manufacturing_orders.drop("temp", axis=0).fillna(0)
+customer_orders = customer_orders.drop("temp", axis=0).fillna(0)
 
 daily_requirements = {
-    (i, j): manufacturing_orders[i][j] for i in calendar for j in MO_list
+    (i, j): customer_orders[i][j] for i in calendar for j in order_list
 }
 daily_requirements_df = pd.DataFrame.from_dict(daily_requirements, orient="index")
 
@@ -541,7 +538,7 @@ solution = optimize_planning(
     ot_costs_per_line,
     we_costs_per_line,
     storage_cost,
-    MO_list,
+    order_list,
     CT_dict,
     late_prod_cost,
 )
