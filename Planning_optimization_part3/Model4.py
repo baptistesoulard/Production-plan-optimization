@@ -24,7 +24,6 @@ def optimize_planning(
     cycle_times,
     delay_cost: int,
 ) -> pd.DataFrame:
-
     # Split weekdays/weekends
     weekdays = []
     weekend = []
@@ -293,7 +292,6 @@ def optimize_planning(
 
 
 def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -> None:
-
     # Plot graph - Requirement
     source = (
         pd.Series(need).rename_axis(["Date", "Customer_Order"]).reset_index(name="Qty")
@@ -367,7 +365,6 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
 def plot_planning(
     planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]
 ) -> None:
-
     # Plot graph - Requirement
     source = pd.Series(need).rename_axis(["Date", "Order"]).reset_index(name="Qty")
 
@@ -422,7 +419,6 @@ def plot_planning(
 
 
 def print_planning(planning: pd.DataFrame) -> None:
-
     df = (
         planning.filter(like="plannedQty", axis=0)
         .copy()
@@ -474,24 +470,20 @@ def check_duplicates(list_to_check):
 order_list = customer_orders["Order"].to_list()
 check_duplicates(order_list)
 
-# Combine MO and cycle times
+# Create cycle times dictionnary
 customer_orders = customer_orders.merge(
     cycle_time, left_on="Product_Family", right_index=True
 )
-customer_orders = customer_orders.rename(
-    columns={"Line_1": "CT_1", "Line_2": "CT_2", "Line_3": "CT_3"}
-)
+
 customer_orders["Delivery_Date"] = pd.to_datetime(
     customer_orders["Delivery_Date"]
 ).dt.strftime("%Y/%m/%d")
 customer_orders = customer_orders.sort_values(by=["Delivery_Date", "Order"])
 
-CT_df = customer_orders[["Order", "CT_1", "CT_2", "CT_3"]]
-CT_df = CT_df.set_index("Order")
-CT_dict = {
-    (m, l): CT_df.iloc[j][k]
-    for j, m in enumerate(order_list)
-    for k, l in enumerate(lines)
+cycle_times = {
+    (order, line): customer_orders[line][customer_orders.Order == order].item()
+    for order in order_list
+    for line in lines
 }
 
 # Define calendar
@@ -509,25 +501,18 @@ while date_modified < end_date:
     date_modified += datetime.timedelta(days=1)
     calendar.append(date_modified.strftime("%Y/%m/%d"))
 
-# Define daily requirement dataframe
-customer_orders = customer_orders[["Order", "Quantity", "Delivery_Date"]]
-customer_orders = customer_orders.append(
-    pd.DataFrame(
-        {
-            "Order": ["temp" for _ in range(len(calendar))],
-            "Delivery_Date": calendar,
-        }
-    )
-)
-customer_orders = customer_orders.pivot(
-    index="Order", columns="Delivery_Date", values="Quantity"
-)
-customer_orders = customer_orders.drop("temp", axis=0).fillna(0)
+# Create daily requirements dictionnary
+daily_requirements = {}
+for day in calendar:
+    for order in order_list:
+        try:
+            daily_requirements[(day, order)] = customer_orders[
+                (customer_orders.Order == order)
+                & (customer_orders.Delivery_Date == day)
+            ]["Quantity"].item()
+        except ValueError:
+            daily_requirements[(day, order)] = 0
 
-daily_requirements = {
-    (i, j): customer_orders[i][j] for i in calendar for j in order_list
-}
-daily_requirements_df = pd.DataFrame.from_dict(daily_requirements, orient="index")
 
 # Optimize planning
 solution = optimize_planning(
@@ -539,7 +524,7 @@ solution = optimize_planning(
     we_costs_per_line,
     storage_cost,
     order_list,
-    CT_dict,
+    cycle_times,
     late_prod_cost,
 )
 
