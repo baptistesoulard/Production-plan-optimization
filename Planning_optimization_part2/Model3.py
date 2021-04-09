@@ -74,7 +74,6 @@ def optimize_planning(
         timeline, workcenters, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name="Labor cost"
     )
 
-    # CONSTRAINTS
     # Set the value of total load (regular + overtime)
     model.addConstrs(
         (
@@ -107,6 +106,7 @@ def optimize_planning(
         name="Link labor cost - working hours - we",
     )
 
+    # CONSTRAINTS
     # Constraint: Total hours of production = required production time
     model.addConstr(
         gurobipy.quicksum(

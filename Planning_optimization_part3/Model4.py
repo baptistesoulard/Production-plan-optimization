@@ -14,16 +14,16 @@ import datapane as dp
 
 
 def optimize_planning(
-    timeline: List[str],
-    workcenters: List[str],
-    needs,
-    wc_cost_reg: Dict[str, int],
-    wc_cost_ot: Dict[str, int],
-    wc_cost_we: Dict[str, int],
-    inventory_carrying_cost: int,
-    customer_orders: List[str],
-    cycle_times,
-    delay_cost: int,
+        timeline: List[str],
+        workcenters: List[str],
+        needs,
+        wc_cost_reg: Dict[str, int],
+        wc_cost_ot: Dict[str, int],
+        wc_cost_we: Dict[str, int],
+        inventory_carrying_cost: int,
+        customer_orders: List[str],
+        cycle_times,
+        delay_cost: int,
 ) -> pd.DataFrame:
     # Split weekdays/weekends
     weekdays = []
@@ -90,27 +90,56 @@ def optimize_planning(
         name="wty_time_constr",
     )
 
+    # Variable status of the line ( 0 = closed, 1 = opened)
+    line_opening = model.addVars(
+        timeline, workcenters, vtype=gurobipy.GRB.BINARY, name="Open status"
+    )
+
     # Load variables (hours) - regular and overtime
     reg_hours = model.addVars(
+        timeline,
+        workcenters,
+        vtype=gurobipy.GRB.CONTINUOUS,
+        name="Regular hours",
+    )
+
+    ot_hours = model.addVars(
+        timeline,
+        workcenters,
+        vtype=gurobipy.GRB.CONTINUOUS,
+        name="Overtime hours",
+    )
+
+    reg_hours_bis = model.addVars(
         timeline,
         workcenters,
         lb=7,
         ub=8,
         vtype=gurobipy.GRB.CONTINUOUS,
-        name="Regular hours",
+        name="regHours",
     )
-    ot_hours = model.addVars(
-        timeline,
-        workcenters,
-        lb=0,
-        ub=4,
-        vtype=gurobipy.GRB.CONTINUOUS,
-        name="Overtime hours",
+    ot_hours_bis = model.addVars(
+        timeline, workcenters, lb=0, ub=4, vtype=gurobipy.GRB.CONTINUOUS, name="OTHours"
     )
 
-    # Variable status of the line ( 0 = closed, 1 = opened)
-    line_opening = model.addVars(
-        timeline, workcenters, vtype=gurobipy.GRB.BINARY, name="Open status"
+    # Set the value of reg and OT hours)
+    model.addConstrs(
+        (
+            reg_hours[(date, wc)]
+            == reg_hours_bis[(date, wc)] * line_opening[(date, wc)]
+            for date in timeline
+            for wc in workcenters
+        ),
+        name="total_hours_constr",
+    )
+
+    model.addConstrs(
+        (
+            ot_hours[(date, wc)] == ot_hours_bis[(date, wc)] * line_opening[(date, wc)]
+            for date in timeline
+            for wc in workcenters
+        ),
+        name="total_hours_constr",
     )
 
     # Variable total load (hours)
@@ -124,8 +153,7 @@ def optimize_planning(
     # Set the value of total load (regular + overtime)
     model.addConstrs(
         (
-            total_hours[(date, wc)]
-            == (reg_hours[(date, wc)] + ot_hours[(date, wc)]) * line_opening[(date, wc)]
+            total_hours[(date, wc)] == (reg_hours[(date, wc)] + ot_hours[(date, wc)])
             for date in timeline
             for wc in workcenters
         ),
@@ -145,18 +173,17 @@ def optimize_planning(
         name="total_hours_constr",
     )
 
-    
     # Variable cost
     labor_cost = model.addVars(
         timeline, workcenters, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name="Labor cost"
     )
-    
+
     # Set the value of cost (hours * hourly cost)
     model.addConstrs(
         (
             labor_cost[(date, wc)]
-            == reg_hours[(date, wc)] * wc_cost_reg[wc] * line_opening[(date, wc)]
-            + ot_hours[(date, wc)] * wc_cost_ot[wc] * line_opening[(date, wc)]
+            == reg_hours[(date, wc)] * wc_cost_reg[wc]
+            + ot_hours[(date, wc)] * wc_cost_ot[wc]
             for date in weekdays
             for wc in workcenters
         ),
@@ -165,7 +192,8 @@ def optimize_planning(
 
     model.addConstrs(
         (
-            labor_cost[(date, wc)] == total_hours[(date, wc)] * wc_cost_we[wc]
+            labor_cost[(date, wc)]
+            == total_hours[(date, wc)] * wc_cost_we[wc]
             for date in weekend
             for wc in workcenters
         ),
@@ -174,23 +202,30 @@ def optimize_planning(
 
     # Variable gap early/late production
     gap_prod = model.addVars(
-        timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="gapProd"
+        timeline,
+        customer_orders,
+        lb=-10000,
+        ub=10000,
+        vtype=gurobipy.GRB.CONTINUOUS,
+        name="gapProd",
     )
     abs_gap_prod = model.addVars(
-        timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="absGapProd"
+        timeline,
+        customer_orders,
+        vtype=gurobipy.GRB.CONTINUOUS,
+        name="absGapProd",
     )
-
     # Set the value of gap for early production
-    for day in range(len(timeline)):
+    for l in range(len(timeline)):
         model.addConstrs(
             (
-                gap_prod[(timeline[day], mo)]
+                gap_prod[(timeline[l], mo)]
                 == gurobipy.quicksum(
                     x_qty[(date, mo, wc)]
-                    for date in timeline[: day + 1]
+                    for date in timeline[: l + 1]
                     for wc in workcenters
                 )
-                - gurobipy.quicksum(needs[(date, mo)] for date in timeline[: day + 1])
+                - (gurobipy.quicksum(needs[(date, mo)] for date in timeline[: l + 1]))
                 for mo in customer_orders
             ),
             name="gap_prod",
@@ -203,47 +238,78 @@ def optimize_planning(
             for date in timeline
             for mo in customer_orders
         ),
-        name="abs_gap_prod",
+        name="abs gap prod",
     )
 
-    # Variable gap early production
+    # Create variable "early production" and "inventory costs"
     early_prod = model.addVars(
-        timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="earlyProd"
+        timeline,
+        customer_orders,
+        vtype=gurobipy.GRB.CONTINUOUS,
+        name="early prod",
+    )
+    inventory_costs = model.addVars(
+        timeline,
+        customer_orders,
+        vtype=gurobipy.GRB.CONTINUOUS,
+        name="inventory costs",
     )
 
-    # Set the value of gap for early production
+    # Set the value of early production
     model.addConstrs(
         (
-            (
-                early_prod[(date, mo)]
-                == (gap_prod[(date, mo)] + abs_gap_prod[(date, mo)]) / 2
-            )
+            early_prod[(date, m)] == (gap_prod[(date, m)] + abs_gap_prod[(date, m)]) / 2
             for date in timeline
-            for mo in customer_orders
+            for m in customer_orders
         ),
-        name="early_prod",
+        name="early prod",
     )
 
-    # Variable gap late production
+    # Set the value of inventory costs
+    model.addConstrs(
+        (
+            (inventory_costs[(date, m)] == early_prod[(date, m)] * inventory_carrying_cost)
+            for date in timeline
+            for m in customer_orders
+        ),
+        name="inventory costs",
+    )
+
+    # Create variable "late production" and "delay costs"
     late_prod = model.addVars(
-        timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="lateProd"
+        timeline,
+        customer_orders,
+        vtype=gurobipy.GRB.CONTINUOUS,
+        name="late prod",
+    )
+    delay_costs = model.addVars(
+        timeline,
+        customer_orders,
+        vtype=gurobipy.GRB.CONTINUOUS,
+        name="inventory costs",
     )
 
-    # Set the value of gap for late production
+    # Set the value of late production
     model.addConstrs(
         (
-            (
-                late_prod[(date, mo)]
-                == (gap_prod[(date, mo)] - abs_gap_prod[(date, mo)]) / 2
-            )
+            late_prod[(date, m)] == (abs_gap_prod[(date, m)] - gap_prod[(date, m)]) / 2
             for date in timeline
-            for mo in customer_orders
+            for m in customer_orders
         ),
-        name="late_prod",
+        name="late prod",
     )
-    
-    
-    # CONSTRAINTS
+
+    # Set the value of delay costs
+    model.addConstrs(
+        (
+            (delay_costs[(date, m)] == late_prod[(date, m)] * delay_cost)
+            for date in timeline
+            for m in customer_orders
+        ),
+        name="delay costs",
+    )
+
+    # CONSTRAINT
     # Constraint: Total hours of production = required production time
     model.addConstr(
         (
@@ -253,13 +319,10 @@ def optimize_planning(
                 for mo in customer_orders
                 for wc in workcenters
             )
-            == gurobipy.quicksum(
-                needs[(date, mo)] for date in timeline for mo in customer_orders
-            )
+            == (gurobipy.quicksum(needs[(date, mo)] for date in timeline for mo in customer_orders))
         ),
         name="total_req",
     )
-
 
     # DEFINE MODEL
     # Objective : minimize a function
@@ -271,12 +334,12 @@ def optimize_planning(
         labor_cost[(date, wc)] for date in timeline for wc in workcenters
     )
     objective += gurobipy.quicksum(
-        early_prod[(date, mo)] * inventory_carrying_cost
+        inventory_costs[(date, mo)]
         for date in timeline
         for mo in customer_orders
     )
     objective += gurobipy.quicksum(
-        late_prod[(date, mo)] * delay_cost
+        delay_costs[(date, mo)]
         for date in timeline
         for mo in customer_orders
     )
@@ -305,22 +368,6 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
     source = source.groupby(["Date"]).sum()
     source["Date"] = source.index
 
-    chart_need = (
-        alt.Chart(source)
-        .mark_bar()
-        .encode(
-            y=alt.Y("Qty", axis=alt.Axis(grid=False)),
-            column=alt.Column("Date:N"),
-            tooltip=["Qty"],
-        )
-        .interactive()
-        .properties(
-            width=600 / len(calendar) - 22,
-            height=50,
-            title="Customer's requirement",
-        )
-    )
-
     # Plot graph - Optimized planning
     source = planning.filter(like="Total hours", axis=0).copy()
     source["Date"] = source.index
@@ -339,32 +386,32 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
 
     bars = (
         alt.Chart(source)
-        .mark_bar()
-        .encode(
+            .mark_bar()
+            .encode(
             x="Line:N",
             y="Hours:Q",
             color="Line:N",
             tooltip=["Date", "Line", "Hours", "Load%"],
         )
-        .interactive()
-        .properties(width=600 / len(timeline) - 22, height=150)
+            .interactive()
+            .properties(width=550 / len(timeline) - 22, height=150)
     )
 
     line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
 
     line_max = (
         alt.Chart(source)
-        .mark_rule(color="darkgrey")
-        .encode(y=alt.Y("Max capacity:Q", title="Load (hours)"))
+            .mark_rule(color="darkgrey")
+            .encode(y=alt.Y("Max capacity:Q", title="Load (hours)"))
     )
 
-    chart_planning = (
+    chart = (
         alt.layer(bars, line_min, line_max, data=source)
-        .facet(column="Date:N")
-        .properties(title="Daily working time")
+            .facet(column="Date:N")
+            .properties(title="Daily working time")
     )
 
-    chart = alt.vconcat(chart_planning, chart_need)
+    # chart = alt.vconcat(chart_planning, chart_need)
     chart.save("planning_load_model4.html")
 
     dp.Report(
@@ -375,33 +422,33 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
 
 
 def plot_planning(
-    planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]
+        planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]
 ) -> None:
     # Plot graph - Requirement
     source = pd.Series(need).rename_axis(["Date", "Order"]).reset_index(name="Qty")
 
     chart_need = (
         alt.Chart(source)
-        .mark_bar()
-        .encode(
+            .mark_bar()
+            .encode(
             y=alt.Y("Qty", axis=alt.Axis(grid=False)),
             column=alt.Column("Date:N"),
             color="Order:N",
             tooltip=["Order", "Qty"],
         )
-        .interactive()
-        .properties(
-            width=600 / len(timeline) - 22,
-            height=50,
+            .interactive()
+            .properties(
+            width=800 / len(timeline) - 22,
+            height=100,
             title="Customer's requirement",
         )
     )
 
     df = (
         planning.filter(like="plannedQty", axis=0)
-        .copy()
-        .rename(columns={"Solution": "Qty"})
-        .reset_index()
+            .copy()
+            .rename(columns={"Solution": "Qty"})
+            .reset_index()
     )
     df[["Date", "Order", "Line"]] = df["index"].str.split(",", expand=True)
     df["Date"] = df["Date"].str.split("[").str[1]
@@ -410,18 +457,18 @@ def plot_planning(
 
     chart_planning = (
         alt.Chart(df)
-        .mark_bar()
-        .encode(
+            .mark_bar()
+            .encode(
             y=alt.Y("Qty", axis=alt.Axis(grid=False)),
             x="Line:N",
             column=alt.Column("Date:N"),
             color="Order:N",
             tooltip=["Line", "Order", "Qty"],
         )
-        .interactive()
-        .properties(
-            width=600 / len(timeline) - 22,
-            height=150,
+            .interactive()
+            .properties(
+            width=800 / len(timeline) - 22,
+            height=200,
             title="Optimized Production Schedule",
         )
     )
@@ -432,16 +479,99 @@ def plot_planning(
     dp.Report(
         '### Production schedule',
         dp.Plot(chart, caption="Production schedule model 4 - Qty")
-    ).publish(name='Optimized production schedule - Qty',
+    ).publish(name='Optimized production schedule - Qty2',
               description="Optimized production schedule - Qty", open=True)
+
+
+def plot_inventory(
+        planning: pd.DataFrame, timeline: List[str], cust_orders,
+) -> None:
+    # Plot inventory
+    df = (
+        planning.filter(like="early prod", axis=0)
+            .copy()
+            .rename(columns={"Solution": "Qty"})
+            .reset_index()
+    )
+
+    df[["Date", "Order"]] = df["index"].str.split(",", expand=True)
+    df["Date"] = df["Date"].str.split("[").str[1]
+    df["Order"] = df["Order"].str.split("]").str[0]
+    df = df[["Date", "Qty", "Order"]]
+
+    models_list = cust_orders[['Order', 'Product_Family']]
+    df = pd.merge(df, models_list, on='Order', how='inner')
+    df = df[["Date", "Qty", "Product_Family"]]
+
+    bars = (
+        alt.Chart(df)
+            .mark_bar()
+            .encode(
+            y="Qty:Q",
+            color="Product_Family:N",
+            tooltip=["Product_Family", "Qty"],
+        )
+            .interactive()
+            .properties(width=550 / len(timeline) - 22, height=100)
+    )
+
+    chart_inventory = (
+        alt.layer(bars, data=df)
+            .facet(column="Date:N")
+            .properties(title="Inventory")
+    )
+
+    # Plot shortage
+    df = (
+        planning.filter(like="late prod", axis=0)
+            .copy()
+            .rename(columns={"Solution": "Qty"})
+            .reset_index()
+    )
+
+    df[["Date", "Order"]] = df["index"].str.split(",", expand=True)
+    df["Date"] = df["Date"].str.split("[").str[1]
+    df["Order"] = df["Order"].str.split("]").str[0]
+    df = df[["Date", "Qty", "Order"]]
+
+    models_list = cust_orders[['Order', 'Product_Family']]
+    df = pd.merge(df, models_list, on='Order', how='inner')
+    df = df[["Date", "Qty", "Product_Family"]]
+
+    bars = (
+        alt.Chart(df)
+            .mark_bar()
+            .encode(
+            y="Qty:Q",
+            color="Product_Family:N",
+            tooltip=["Product_Family", "Qty"],
+        )
+            .interactive()
+            .properties(width=550 / len(timeline) - 22, height=100)
+    )
+
+    chart_shortage = (
+        alt.layer(bars, data=df)
+            .facet(column="Date:N")
+            .properties(title="Shortage")
+    )
+
+    chart = alt.vconcat(chart_inventory, chart_shortage)
+    chart.save("Inventory_Shortage.html")
+
+    dp.Report(
+        '### Inventory_Shortage',
+        dp.Plot(chart, caption="Inventory_Shortage")
+    ).publish(name='Inventory_Shortage',
+              description="Inventory_Shortage", open=True)
 
 
 def print_planning(planning: pd.DataFrame) -> None:
     df = (
         planning.filter(like="plannedQty", axis=0)
-        .copy()
-        .rename(columns={"Solution": "Qty"})
-        .reset_index()
+            .copy()
+            .rename(columns={"Solution": "Qty"})
+            .reset_index()
     )
     df[["Date", "Customer_Order", "Line"]] = df["index"].str.split(",", expand=True)
     df["Date"] = df["Date"].str.split("[").str[1]
@@ -527,10 +657,9 @@ for day in calendar:
             daily_requirements[(day, order)] = customer_orders[
                 (customer_orders.Order == order)
                 & (customer_orders.Delivery_Date == day)
-            ]["Quantity"].item()
+                ]["Quantity"].item()
         except ValueError:
             daily_requirements[(day, order)] = 0
-
 
 # Optimize planning
 solution = optimize_planning(
@@ -550,3 +679,4 @@ solution = optimize_planning(
 plot_load(solution, daily_requirements, calendar)
 print_planning(solution)
 plot_planning(solution, daily_requirements, calendar)
+plot_inventory(solution, calendar, customer_orders)
