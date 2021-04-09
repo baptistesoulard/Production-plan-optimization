@@ -10,6 +10,7 @@ import gurobipy
 import datetime
 from typing import List, Dict
 import altair as alt
+import datapane as dp
 
 
 def optimize_planning(
@@ -315,8 +316,8 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
         .interactive()
         .properties(
             width=600 / len(calendar) - 22,
-            height=90,
-            title="Requirement",
+            height=50,
+            title="Customer's requirement",
         )
     )
 
@@ -346,7 +347,7 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
             tooltip=["Date", "Line", "Hours", "Load%"],
         )
         .interactive()
-        .properties(width=600 / len(timeline) - 22, height=200)
+        .properties(width=600 / len(timeline) - 22, height=150)
     )
 
     line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
@@ -354,17 +355,23 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
     line_max = (
         alt.Chart(source)
         .mark_rule(color="darkgrey")
-        .encode(y=alt.Y("Max capacity:Q", title="Load"))
+        .encode(y=alt.Y("Max capacity:Q", title="Load (hours)"))
     )
 
     chart_planning = (
         alt.layer(bars, line_min, line_max, data=source)
         .facet(column="Date:N")
-        .properties(title="Optimized Production Planning")
+        .properties(title="Daily working time")
     )
 
     chart = alt.vconcat(chart_planning, chart_need)
     chart.save("planning_load_model4.html")
+
+    dp.Report(
+        '### Working time',
+        dp.Plot(chart, caption="Production schedule model 4 - Time")
+    ).publish(name='Optimized production schedule - Time',
+              description="Optimized production schedule - Time", open=True)
 
 
 def plot_planning(
@@ -385,8 +392,8 @@ def plot_planning(
         .interactive()
         .properties(
             width=600 / len(timeline) - 22,
-            height=90,
-            title="Requirement",
+            height=50,
+            title="Customer's requirement",
         )
     )
 
@@ -414,13 +421,19 @@ def plot_planning(
         .interactive()
         .properties(
             width=600 / len(timeline) - 22,
-            height=200,
-            title="Optimized Production Planning",
+            height=150,
+            title="Optimized Production Schedule",
         )
     )
 
     chart = alt.vconcat(chart_planning, chart_need)
     chart.save("planning_MO_model4.html")
+
+    dp.Report(
+        '### Production schedule',
+        dp.Plot(chart, caption="Production schedule model 4 - Qty")
+    ).publish(name='Optimized production schedule - Qty',
+              description="Optimized production schedule - Qty", open=True)
 
 
 def print_planning(planning: pd.DataFrame) -> None:
