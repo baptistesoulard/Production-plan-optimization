@@ -105,7 +105,7 @@ def optimize_planning(
         name="Overtime hours",
     )
 
-    # Status of the line ( 0 = closed, 1 = opened)
+    # Variable status of the line ( 0 = closed, 1 = opened)
     line_opening = model.addVars(
         timeline, workcenters, vtype=gurobipy.GRB.BINARY, name="Open status"
     )
@@ -118,12 +118,6 @@ def optimize_planning(
         name="Total hours",
     )
 
-    # Variable cost
-    labor_cost = model.addVars(
-        timeline, workcenters, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name="Labor cost"
-    )
-
-    # CONSTRAINTS
     # Set the value of total load (regular + overtime)
     model.addConstrs(
         (
@@ -134,7 +128,12 @@ def optimize_planning(
         ),
         name="Link total hours - reg/ot hours",
     )
-
+    
+    # Variable cost
+    labor_cost = model.addVars(
+        timeline, workcenters, lb=0, vtype=gurobipy.GRB.CONTINUOUS, name="Labor cost"
+    )
+    
     # Set the value of cost (hours * hourly cost)
     model.addConstrs(
         (
@@ -156,36 +155,7 @@ def optimize_planning(
         name="Link labor cost - working hours - we",
     )
 
-    # Constraint: Total hours of production = required production time
-    model.addConstrs(
-        (
-            (
-                total_hours[(date, wc)]
-                == gurobipy.quicksum(x_time[(date, mo, wc)] for mo in customer_orders)
-                for date in timeline
-                for wc in workcenters
-            )
-        ),
-        name="total_hours_constr",
-    )
-
-    # Constraint: Total hours of production = required production time
-    model.addConstr(
-        (
-            gurobipy.quicksum(
-                x_qty[(date, mo, wc)]
-                for date in timeline
-                for mo in customer_orders
-                for wc in workcenters
-            )
-            == gurobipy.quicksum(
-                needs[(date, mo)] for date in timeline for mo in customer_orders
-            )
-        ),
-        name="total_req",
-    )
-
-    # Gap early/late production
+    # Variable gap early/late production
     gap_prod = model.addVars(
         timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="gapProd"
     )
@@ -219,7 +189,7 @@ def optimize_planning(
         name="abs_gap_prod",
     )
 
-    # Definition gap early production
+    # Variable gap early production
     early_prod = model.addVars(
         timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="earlyProd"
     )
@@ -237,7 +207,7 @@ def optimize_planning(
         name="early_prod",
     )
 
-    # Gap late production
+    # Variable gap late production
     late_prod = model.addVars(
         timeline, customer_orders, vtype=gurobipy.GRB.CONTINUOUS, name="lateProd"
     )
@@ -254,6 +224,38 @@ def optimize_planning(
         ),
         name="late_prod",
     )
+    
+    
+    # CONSTRAINTS
+    # Constraint: Total hours of production = required production time
+    model.addConstrs(
+        (
+            (
+                total_hours[(date, wc)]
+                == gurobipy.quicksum(x_time[(date, mo, wc)] for mo in customer_orders)
+                for date in timeline
+                for wc in workcenters
+            )
+        ),
+        name="total_hours_constr",
+    )
+
+    # Constraint: Total hours of production = required production time
+    model.addConstr(
+        (
+            gurobipy.quicksum(
+                x_qty[(date, mo, wc)]
+                for date in timeline
+                for mo in customer_orders
+                for wc in workcenters
+            )
+            == gurobipy.quicksum(
+                needs[(date, mo)] for date in timeline for mo in customer_orders
+            )
+        ),
+        name="total_req",
+    )
+
 
     # DEFINE MODEL
     # Objective : minimize a function
