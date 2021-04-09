@@ -38,7 +38,7 @@ def optimize_planning(
     model = gurobipy.Model("Optimize production planning")
 
     # DEFINE VARIABLES
-    # Quantity and time variables
+    # Quantity variable
     x_qty = model.addVars(
         timeline,
         customer_orders,
@@ -47,6 +47,8 @@ def optimize_planning(
         vtype=gurobipy.GRB.INTEGER,
         name="plannedQty",
     )
+
+    # Time variable
     x_time = model.addVars(
         timeline,
         customer_orders,
@@ -128,6 +130,20 @@ def optimize_planning(
         ),
         name="Link total hours - reg/ot hours",
     )
+
+    # Set total hours of production in link with the time variable
+    model.addConstrs(
+        (
+            (
+                total_hours[(date, wc)]
+                == gurobipy.quicksum(x_time[(date, mo, wc)] for mo in customer_orders)
+                for date in timeline
+                for wc in workcenters
+            )
+        ),
+        name="total_hours_constr",
+    )
+
     
     # Variable cost
     labor_cost = model.addVars(
@@ -227,19 +243,6 @@ def optimize_planning(
     
     
     # CONSTRAINTS
-    # Constraint: Total hours of production = required production time
-    model.addConstrs(
-        (
-            (
-                total_hours[(date, wc)]
-                == gurobipy.quicksum(x_time[(date, mo, wc)] for mo in customer_orders)
-                for date in timeline
-                for wc in workcenters
-            )
-        ),
-        name="total_hours_constr",
-    )
-
     # Constraint: Total hours of production = required production time
     model.addConstr(
         (
