@@ -414,11 +414,11 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
     # chart = alt.vconcat(chart_planning, chart_need)
     chart.save("planning_load_model4.html")
 
-    dp.Report(
-        '### Working time',
-        dp.Plot(chart, caption="Production schedule model 4 - Time")
-    ).publish(name='Optimized production schedule - Time',
-              description="Optimized production schedule - Time", open=True)
+ #   dp.Report(
+ #       '### Working time',
+ #       dp.Plot(chart, caption="Production schedule model 4 - Time")
+ #   ).publish(name='Optimized production schedule - Time',
+ #             description="Optimized production schedule - Time", open=True)
 
 
 def plot_planning(
@@ -476,11 +476,11 @@ def plot_planning(
     chart = alt.vconcat(chart_planning, chart_need)
     chart.save("planning_MO_model4.html")
 
-    dp.Report(
-        '### Production schedule',
-        dp.Plot(chart, caption="Production schedule model 4 - Qty")
-    ).publish(name='Optimized production schedule - Qty2',
-              description="Optimized production schedule - Qty", open=True)
+ #   dp.Report(
+ #       '### Production schedule',
+ #       dp.Plot(chart, caption="Production schedule model 4 - Qty")
+ #   ).publish(name='Optimized production schedule - Qty',
+ #             description="Optimized production schedule - Qty", open=True)
 
 
 def plot_inventory(
@@ -512,7 +512,7 @@ def plot_inventory(
             tooltip=["Product_Family", "Qty"],
         )
             .interactive()
-            .properties(width=550 / len(timeline) - 22, height=100)
+            .properties(width=550 / len(timeline) - 22, height=60)
     )
 
     chart_inventory = (
@@ -547,7 +547,7 @@ def plot_inventory(
             tooltip=["Product_Family", "Qty"],
         )
             .interactive()
-            .properties(width=550 / len(timeline) - 22, height=100)
+            .properties(width=550 / len(timeline) - 22, height=60)
     )
 
     chart_shortage = (
@@ -559,11 +559,11 @@ def plot_inventory(
     chart = alt.vconcat(chart_inventory, chart_shortage)
     chart.save("Inventory_Shortage.html")
 
-    dp.Report(
-        '### Inventory_Shortage',
-        dp.Plot(chart, caption="Inventory_Shortage")
-    ).publish(name='Inventory_Shortage',
-              description="Inventory_Shortage", open=True)
+ #   dp.Report(
+ #       '#### Inventory and shortage report',
+ #       dp.Plot(chart, caption="Inventory_Shortage")
+ #   ).publish(name='Inventory_Shortage',
+ #             description="Inventory_Shortage", open=True)
 
 
 def print_planning(planning: pd.DataFrame) -> None:
