@@ -190,6 +190,10 @@ def plot_planning(
     source["Min capacity"] = 7
     source["Max capacity"] = 12
     source = source.round({"Hours": 1})
+    source["Load%"] = pd.Series(
+        ["{0:.0f}%".format(val / 8 * 100) for val in source["Hours"]],
+        index=source.index,
+    )
 
     bars = (
         alt.Chart(source)
@@ -198,7 +202,9 @@ def plot_planning(
             x="Line:N",
             y="Hours:Q",
             color="Line:N",
+            tooltip=["Date", "Line", "Hours", "Load%"],
         )
+        .interactive()
         .properties(width=600 / len(timeline) - 22, height=200)
     )
 
@@ -208,15 +214,18 @@ def plot_planning(
 
     line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
 
-    line_max = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Max capacity:Q")
-
-    chart_planning = (
-        alt.layer(bars, text, line_min, line_max, data=source)
-        .facet(column="Date:N")
-        .properties(title="Optimized Production Planning")
+    line_max = (
+        alt.Chart(source)
+            .mark_rule(color="darkgrey")
+            .encode(y=alt.Y("Max capacity:Q", title="Load (hours)"))
     )
 
-    chart = alt.vconcat(chart_planning, chart_need)
+    chart = (
+        alt.layer(bars, line_min, line_max, data=source)
+            .facet(column="Date:N")
+            .properties(title="Daily working time", background='#00000000')
+    )
+
     chart.save("planning_time_model3.html")
 
 
