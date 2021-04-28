@@ -24,6 +24,7 @@ def optimize_planning(
         customer_orders: List[str],
         cycle_times,
         delay_cost: int,
+        changeover: Dict[str, int],
 ) -> pd.DataFrame:
     # Split weekdays/weekends
     weekdays = []
@@ -604,6 +605,8 @@ customer_orders = pd.read_excel("Customer_orders.xlsx")
 capacity = pd.read_excel("Constraints.xlsx", sheet_name="8h capacity").set_index("Line")
 cycle_time = capacity.rdiv(8)
 
+# Get changeover
+changeover_matrix = pd.read_excel("Constraints.xlsx", sheet_name="Changeover (min)").set_index("Model")
 
 def check_duplicates(list_to_check):
     if len(list_to_check) == len(set(list_to_check)):
@@ -632,6 +635,14 @@ cycle_times = {
     for order in order_list
     for line in lines
 }
+
+# Create changeover dictionnary
+materials_list = changeover_matrix.index.to_list()
+changeover = {(change_from, change_to): changeover_matrix[change_to][change_from]
+              for change_from in materials_list
+              for change_to in materials_list
+              }
+
 
 # Define calendar
 start_date = datetime.datetime.strptime(
@@ -672,10 +683,11 @@ solution = optimize_planning(
     order_list,
     cycle_times,
     late_prod_cost,
+    changeover
 )
 
 # Plot the new planning
-plot_load(solution, daily_requirements, calendar)
-print_planning(solution)
-plot_planning(solution, daily_requirements, calendar)
-plot_inventory(solution, calendar, customer_orders)
+#plot_load(solution, daily_requirements, calendar)
+#print_planning(solution)
+#plot_planning(solution, daily_requirements, calendar)
+#plot_inventory(solution, calendar, customer_orders)
