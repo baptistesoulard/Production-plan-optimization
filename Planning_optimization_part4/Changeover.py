@@ -51,7 +51,7 @@ while date_modified < end_date:
     calendar.append(date_modified.strftime("%Y/%m/%d"))
 
 # Get changeover
-data= pd.read_csv("Planning_model4_list.csv")
+data = pd.read_csv("Planning_model4_list.csv")
 x_qty = {
     (day, order, line): data['Qty'][data.Date == day][data.Line == line][data.Customer_Order == order].item()
     for day in calendar

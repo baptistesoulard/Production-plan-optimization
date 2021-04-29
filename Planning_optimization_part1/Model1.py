@@ -9,6 +9,7 @@ import pandas as pd
 import gurobipy
 from typing import List, Dict
 import altair as alt
+import datapane as dp
 
 
 def optimize_planning(
@@ -114,7 +115,7 @@ def plot_planning(planning, need, timeline):
     source["Date"] = source.index
 
     bars_need = (alt.Chart(source).mark_bar().encode(y="Hours:Q")).properties(
-        width=600 / len(timeline) - 22, height=90
+        width=550 / len(timeline) - 22, height=75
     )
 
     text_need = bars_need.mark_text(
@@ -148,28 +149,37 @@ def plot_planning(planning, need, timeline):
         .encode(
             x="Line:N",
             y="Hours:Q",
+            column=alt.Column("Date:N"),
             color="Line:N",
             tooltip=["Date", "Line", "Hours", "Load%"],
         )
         .interactive()
-        .properties(width=600 / len(timeline) - 22, height=200)
+        .properties(width=550 / len(timeline) - 22, height=150, title="Optimized Production Schedule")
     )
 
-    line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
+#    line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
 
-    line_max = (
-        alt.Chart(source)
-            .mark_rule(color="darkgrey")
-            .encode(y=alt.Y("Max capacity:Q", title="Load (hours)"))
-    )
+#    line_max = (
+#        alt.Chart(source)
+#            .mark_rule(color="darkgrey")
+#            .encode(y=alt.Y("Max capacity:Q", title="Load (hours)"))
+#    )
 
-    chart = (
-        alt.layer(bars, line_min, line_max, data=source)
-            .facet(column="Date:N")
-            .properties(title="Daily working time", background='#00000000')
-    )
+  #  chart_planning = (
+  #      alt.layer(bars, line_min, line_max, data=source)
+  #          .facet(column="Date:N")
+  #          .properties(title="Daily working time", background='#00000000')
+  #  )
+
+    chart = alt.vconcat(bars, chart_need)
 
     chart.save("planning_time_model1.html")
+
+    dp.Report(
+      #  '### Working time',
+        dp.Plot(chart, caption="Production schedule model 1 - Time")
+    ).publish(name='Optimized production schedule model 1 - Time',
+             description="Optimized production schedule model 1 - Time", open=True)
 
 
 # Define daily requirement (hours/day)

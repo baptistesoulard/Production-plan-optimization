@@ -39,12 +39,15 @@ def optimize_planning(
     # Initiate optimization model
     model = gurobipy.Model("Optimize production planning")
 
+    sequence = list(range(1, 3))
+
     # DEFINE VARIABLES
     # Quantity variable
     x_qty = model.addVars(
         timeline,
         customer_orders,
         workcenters,
+        sequence,
         lb=0,
         vtype=gurobipy.GRB.INTEGER,
         name="plannedQty",
@@ -55,6 +58,7 @@ def optimize_planning(
         timeline,
         customer_orders,
         workcenters,
+        sequence,
         lb=0,
         vtype=gurobipy.GRB.CONTINUOUS,
         name="plannedTime",
@@ -64,10 +68,11 @@ def optimize_planning(
     model.addConstrs(
         (
             (
-                x_time[(date, mo, wc)] == x_qty[(date, mo, wc)] * cycle_times[(mo, wc)]
+                x_time[(date, mo, wc, seq)] == x_qty[(date, mo, wc, seq)] * cycle_times[(mo, wc)]
                 for date in timeline
                 for mo in customer_orders
                 for wc in workcenters
+                for seq in sequence
             )
         ),
         name="x_time_constr",
@@ -83,9 +88,10 @@ def optimize_planning(
         (
             (
                 quantity[(date, wc)]
-                == gurobipy.quicksum(x_qty[(date, mo, wc)] for mo in customer_orders)
+                == gurobipy.quicksum(x_qty[(date, mo, wc, seq)] for mo in customer_orders)
                 for date in timeline
                 for wc in workcenters
+                for seq in sequence
             )
         ),
         name="wty_time_constr",
@@ -166,9 +172,10 @@ def optimize_planning(
         (
             (
                 total_hours[(date, wc)]
-                == gurobipy.quicksum(x_time[(date, mo, wc)] for mo in customer_orders)
+                == gurobipy.quicksum(x_time[(date, mo, wc, seq)] for mo in customer_orders)
                 for date in timeline
                 for wc in workcenters
+                for seq in sequence
             )
         ),
         name="total_hours_constr",
@@ -222,9 +229,10 @@ def optimize_planning(
             (
                 gap_prod[(timeline[l], mo)]
                 == gurobipy.quicksum(
-                    x_qty[(date, mo, wc)]
+                    x_qty[(date, mo, wc, seq)]
                     for date in timeline[: l + 1]
                     for wc in workcenters
+                    for seq in sequence
                 )
                 - (gurobipy.quicksum(needs[(date, mo)] for date in timeline[: l + 1]))
                 for mo in customer_orders
@@ -315,10 +323,11 @@ def optimize_planning(
     model.addConstr(
         (
             gurobipy.quicksum(
-                x_qty[(date, mo, wc)]
+                x_qty[(date, mo, wc, seq)]
                 for date in timeline
                 for mo in customer_orders
                 for wc in workcenters
+                for seq in sequence
             )
             == (gurobipy.quicksum(needs[(date, mo)] for date in timeline for mo in customer_orders))
         ),
