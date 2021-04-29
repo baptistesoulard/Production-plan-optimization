@@ -417,7 +417,7 @@ def plot_load(planning: pd.DataFrame, need: pd.DataFrame, timeline: List[str]) -
  #       '### Working time',
  #       dp.Plot(chart, caption="Production schedule model 4 - Time")
  #   ).publish(name='Optimized production schedule - Time',
- #             description="Optimized production schedule - Time", open=True)
+ #             description="Optimized production schedule - Time", open=True, visibility='PUBLIC')
 
 
 def plot_planning(
@@ -479,7 +479,7 @@ def plot_planning(
  #       '### Production schedule',
  #       dp.Plot(chart, caption="Production schedule model 4 - Qty")
  #   ).publish(name='Optimized production schedule - Qty',
- #             description="Optimized production schedule - Qty", open=True)
+ #             description="Optimized production schedule - Qty", open=True, visibility='PUBLIC')
 
 
 def plot_inventory(
@@ -562,7 +562,7 @@ def plot_inventory(
  #       '#### Inventory and shortage report',
  #       dp.Plot(chart, caption="Inventory_Shortage")
  #   ).publish(name='Inventory_Shortage',
- #             description="Inventory_Shortage", open=True)
+ #             description="Inventory_Shortage", open=True, visibility='PUBLIC')
 
 
 def print_planning(planning: pd.DataFrame) -> None:

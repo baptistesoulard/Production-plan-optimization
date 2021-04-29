@@ -100,10 +100,10 @@ def optimize_planning(
 
     print("Total cost = $" + str(model.ObjVal))
 
-    #model.write("Planning_optimization.lp")
-    #file = open("Planning_optimization.lp", 'r')
-    #print(file.read())
-    #file.close()
+    # model.write("Planning_optimization.lp")
+    # file = open("Planning_optimization.lp", 'r')
+    # print(file.read())
+    # file.close()
 
     return sol
 
@@ -114,18 +114,20 @@ def plot_planning(planning, need, timeline):
     source = source.rename(columns={0: "Hours"})
     source["Date"] = source.index
 
-    bars_need = (alt.Chart(source).mark_bar().encode(y="Hours:Q")).properties(
-        width=550 / len(timeline) - 22, height=75
-    )
-
-    text_need = bars_need.mark_text(
-        align="left", baseline="middle", dx=-8, dy=-7
-    ).encode(text="Hours:Q")
-
-    chart_need = (
-        alt.layer(bars_need, text_need, data=source)
-        .facet(column="Date:N")
-        .properties(title="Requirement")
+    bars_need = (
+        alt.Chart(source)
+        .mark_bar()
+        .encode(
+            y="Hours:Q",
+            column=alt.Column("Date:N"),
+            tooltip=["Date", "Hours"],
+        )
+        .interactive()
+        .properties(
+            width=550 / len(timeline) - 22,
+            height=75,
+            title='Requirement',
+        )
     )
 
     # Plot graph - Optimized planning
@@ -154,32 +156,22 @@ def plot_planning(planning, need, timeline):
             tooltip=["Date", "Line", "Hours", "Load%"],
         )
         .interactive()
-        .properties(width=550 / len(timeline) - 22, height=150, title="Optimized Production Schedule")
+        .properties(
+            width=550 / len(timeline) - 22,
+            height=150,
+            title="Optimized Production Schedule",
+        )
     )
 
-#    line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
-
-#    line_max = (
-#        alt.Chart(source)
-#            .mark_rule(color="darkgrey")
-#            .encode(y=alt.Y("Max capacity:Q", title="Load (hours)"))
-#    )
-
-  #  chart_planning = (
-  #      alt.layer(bars, line_min, line_max, data=source)
-  #          .facet(column="Date:N")
-  #          .properties(title="Daily working time", background='#00000000')
-  #  )
-
-    chart = alt.vconcat(bars, chart_need)
-
+    chart = alt.vconcat(bars, bars_need)
     chart.save("planning_time_model1.html")
 
-    dp.Report(
-      #  '### Working time',
-        dp.Plot(chart, caption="Production schedule model 1 - Time")
-    ).publish(name='Optimized production schedule model 1 - Time',
-             description="Optimized production schedule model 1 - Time", open=True)
+    dp.Report(dp.Plot(chart, caption="Production schedule model 1 - Time")).publish(
+        name="Optimized production schedule model 1 - Time",
+        description="Optimized production schedule model 1 - Time",
+        open=True,
+        visibily="PUBLIC",
+    )
 
 
 # Define daily requirement (hours/day)
@@ -213,4 +205,3 @@ solution = optimize_planning(
 
 # Plot the new planning
 plot_planning(solution, daily_requirements_df, calendar)
-

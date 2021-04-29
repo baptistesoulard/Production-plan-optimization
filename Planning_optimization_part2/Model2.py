@@ -10,6 +10,7 @@ import gurobipy
 import datetime
 from typing import List, Dict
 import altair as alt
+import datapane as dp
 
 
 def optimize_planning(
@@ -131,26 +132,26 @@ def optimize_planning(
     return sol
 
 
-def plot_planning(
-    planning: pd.DataFrame, need: pd.DataFrame, timeline: pd.DataFrame
-) -> None:
+def plot_planning(planning, need, timeline):
     # Plot graph - Requirement
     source = need.copy()
     source = source.rename(columns={0: "Hours"})
     source["Date"] = source.index
 
-    bars_need = (alt.Chart(source).mark_bar().encode(y="Hours:Q")).properties(
-        width=600 / len(timeline) - 22, height=90
-    )
-
-    text_need = bars_need.mark_text(
-        align="left", baseline="middle", dx=-8, dy=-7
-    ).encode(text="Hours:Q")
-
-    chart_need = (
-        alt.layer(bars_need, text_need, data=source)
-        .facet(column="Date:N")
-        .properties(title="Requirement")
+    bars_need = (
+        alt.Chart(source)
+            .mark_bar()
+            .encode(
+            y="Hours:Q",
+            column=alt.Column("Date:N"),
+            tooltip=["Date", "Hours"],
+        )
+            .interactive()
+            .properties(
+            width=550 / len(timeline) - 22,
+            height=75,
+            title='Requirement',
+        )
     )
 
     # Plot graph - Optimized planning
@@ -170,32 +171,31 @@ def plot_planning(
 
     bars = (
         alt.Chart(source)
-        .mark_bar()
-        .encode(
+            .mark_bar()
+            .encode(
             x="Line:N",
             y="Hours:Q",
+            column=alt.Column("Date:N"),
             color="Line:N",
             tooltip=["Date", "Line", "Hours", "Load%"],
         )
-        .interactive()
-        .properties(width=600 / len(timeline) - 22, height=200)
+            .interactive()
+            .properties(
+            width=550 / len(timeline) - 22,
+            height=150,
+            title="Optimized Production Schedule",
+        )
     )
 
-    line_min = alt.Chart(source).mark_rule(color="darkgrey").encode(y="Min capacity:Q")
-
-    line_max = (
-        alt.Chart(source)
-            .mark_rule(color="darkgrey")
-            .encode(y=alt.Y("Max capacity:Q", title="Load (hours)"))
-    )
-
-    chart = (
-        alt.layer(bars, line_min, line_max, data=source)
-            .facet(column="Date:N")
-            .properties(title="Daily working time", background='#00000000')
-    )
-
+    chart = alt.vconcat(bars, bars_need)
     chart.save("planning_time_model2.html")
+
+    dp.Report(dp.Plot(chart, caption="Production schedule model 2 - Time")).publish(
+        name="Optimized production schedule model 2 - Time",
+        description="Optimized production schedule model 2 - Time",
+        open=True,
+        visibily="PUBLIC",
+    )
 
 
 # Define daily requirement
